@@ -31,6 +31,10 @@ opt = [
   "adalflow>=0.6.0",
   "cognee>=0.1.0",
 ]
+demo = [
+  "playwright>=1.49.0",
+  "edge-tts>=6.1.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]

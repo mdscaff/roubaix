@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Roubaix — Demo</title>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --panel: #141a22;
+      --border: #243042;
+      --text: #e8edf4;
+      --muted: #8b98a8;
+      --accent: #3d8bfd;
+      --accent-dim: #1e4a8a;
+      --good: #34d399;
+      --warn: #fbbf24;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(1200px 600px at 10% -10%, #1a2340 0%, var(--bg) 55%);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    header {
+      padding: 3rem 1.5rem 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    header h1 {
+      font-size: clamp(1.75rem, 4vw, 2.25rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.75rem;
+    }
+    header p.lead {
+      color: var(--muted);
+      font-size: 1.1rem;
+      max-width: 36rem;
+      margin: 0 auto;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      border: 1px solid var(--accent-dim);
+      padding: 0.35rem 0.65rem;
+      border-radius: 999px;
+      margin-bottom: 1rem;
+    }
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 1.5rem 4rem;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.75rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    section h2 {
+      margin: 0 0 1rem;
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    ul.clean {
+      margin: 0;
+      padding-left: 1.2rem;
+      color: var(--muted);
+    }
+    ul.clean li { margin-bottom: 0.65rem; }
+    ul.clean strong { color: var(--text); }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .metric {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .metric .label { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+    .metric .value { font-size: 1.05rem; font-weight: 600; color: var(--good); }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-top: 1rem;
+    }
+    button#run-demo {
+      background: linear-gradient(180deg, #4a9eff 0%, var(--accent) 100%);
+      color: #fff;
+      border: none;
+      padding: 0.75rem 1.35rem;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(61, 139, 253, 0.35);
+    }
+    button#run-demo:hover { filter: brightness(1.08); }
+    button#run-demo:disabled { opacity: 0.55; cursor: wait; }
+    #demo-status { font-size: 0.9rem; color: var(--muted); }
+    pre#demo-result {
+      margin: 1rem 0 0;
+      padding: 1rem;
+      background: #080a0e;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: #c8d4e0;
+      min-height: 4rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <header id="hero">
+    <span class="badge">Graph-aware retrieval</span>
+    <h1>Roubaix</h1>
+    <p class="lead">
+      Route every question to the <strong style="color:var(--text)">right</strong> kind of search—
+      before you pay for the most expensive one.
+    </p>
+  </header>
+
+  <main>
+    <section id="problems">
+      <h2>Problems we are solving</h2>
+      <ul class="clean">
+        <li><strong>Runaway cost:</strong> One-size-fits-all AI runs the priciest path on every question.</li>
+        <li><strong>Shallow answers on relationships:</strong> “Who depends on whom?” needs graph depth, not keywords alone.</li>
+        <li><strong>Stale “current” answers:</strong> Time-sensitive questions need explicit freshness, not hope.</li>
+        <li><strong>No audit trail:</strong> Leadership can’t tie spend to routing choices without transparent decisions.</li>
+      </ul>
+    </section>
+
+    <section id="outcomes">
+      <h2>Business outcomes</h2>
+      <div class="grid-2">
+        <div class="metric">
+          <div class="label">Cost efficiency</div>
+          <div class="value">Lower $ / good answer</div>
+        </div>
+        <div class="metric">
+          <div class="label">Speed</div>
+          <div class="value">Lower latency path-first</div>
+        </div>
+        <div class="metric">
+          <div class="label">Quality</div>
+          <div class="value">Better multi-hop &amp; links</div>
+        </div>
+        <div class="metric">
+          <div class="label">Trust</div>
+          <div class="value">Fresh when it matters</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="live-demo">
+      <h2>Live API demo</h2>
+      <p style="color:var(--muted); margin:0 0 0.5rem;">
+        Calls this server’s <code style="color:var(--accent);">POST /answer</code> with a sample query. The response shows
+        <strong style="color:var(--text);">which retrieval mode</strong> was selected—evidence for cost and quality reporting.
+      </p>
+      <div class="actions">
+        <button type="button" id="run-demo">Run sample query</button>
+        <span id="demo-status"></span>
+      </div>
+      <pre id="demo-result">Click the button to run a live request…</pre>
+    </section>
+  </main>
+
+  <footer>
+    Roubaix · Cognee-centered scaffold · DSPy/GEPA optimization &amp; AdalFlow runtime control (roadmap)
+  </footer>
+
+  <script>
+    const btn = document.getElementById("run-demo");
+    const out = document.getElementById("demo-result");
+    const status = document.getElementById("demo-status");
+
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      status.textContent = "Calling API…";
+      out.textContent = "";
+      try {
+        const r = await fetch("/answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: "How is our billing service connected to the data warehouse?",
+            freshness_required: false,
+          }),
+        });
+        const data = await r.json();
+        out.textContent = JSON.stringify(data, null, 2);
+        status.textContent = r.ok ? "OK" : "HTTP " + r.status;
+      } catch (e) {
+        out.textContent = String(e);
+        status.textContent = "Error";
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

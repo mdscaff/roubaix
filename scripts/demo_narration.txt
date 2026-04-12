@@ -1,0 +1,9 @@
+Welcome to Roubaix—a build-ready experiment in graph-aware enterprise retrieval.
+
+Here are the problems we are attacking. First, runaway cost: many AI stacks default to the most expensive retrieval path on every question. Second, relationship-heavy questions get shallow keyword answers when they need graph depth. Third, time-sensitive answers go stale without explicit freshness handling. And fourth, leadership lacks an audit trail that ties spend to routing decisions.
+
+The business outcomes we are driving toward are measurable: lower cost per successful answer, lower latency by using the right path first, higher quality on multi-hop and relationship questions, and higher trust when answers must be current.
+
+On this page you will see a live call into our API. The response includes which retrieval mode was selected—transparency you can connect to cost and quality reporting.
+
+This scaffold uses deterministic routing today, with DSPy and GEPA optimization and AdalFlow-style runtime control on the roadmap. Thank you for watching.

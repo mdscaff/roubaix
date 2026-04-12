@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 
 from app.core.logging import configure_logging
 from app.domain.models import QueryRequest
@@ -9,6 +12,10 @@ from app.services.router import QueryRouter
 from app.services.runtime_controller import RuntimeController
 
 configure_logging()
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_STATIC = _REPO_ROOT / "static"
+
 app = FastAPI(title="Roubaix API", version="0.1.0")
 
 orchestrator = QueryOrchestrator(
@@ -22,6 +29,15 @@ orchestrator = QueryOrchestrator(
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/demo")
+async def demo() -> FileResponse:
+    """CEO-friendly browser demo (problems, outcomes, live POST /answer)."""
+    path = _STATIC / "demo.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Missing demo page: {path}")
+    return FileResponse(path, media_type="text/html")
 
 
 @app.post("/answer")
