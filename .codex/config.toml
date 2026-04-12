@@ -1,0 +1,15 @@
+model = "gpt-5"
+model_reasoning_effort = "high"
+
+[tools]
+web_search = true
+
+[profiles.default]
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[project]
+name = "roubaix"
+
+[output]
+show_diff = true
