@@ -1,11 +1,16 @@
 from app.domain.models import QueryRequest, RouteDecision, SearchMode
+from app.services.normalizer import QueryNormalizer
 
 
 class QueryRouter:
     """Deterministic baseline router before DSPy optimization."""
 
+    def __init__(self, normalizer: QueryNormalizer | None = None) -> None:
+        self.normalizer = normalizer or QueryNormalizer()
+
     def route(self, request: QueryRequest) -> RouteDecision:
-        q = request.query.lower()
+        # Use pre-normalized form if available, otherwise normalize inline.
+        q = request.normalized_query or self.normalizer.normalize(request.query)
         if request.freshness_required or any(word in q for word in ["today", "latest", "current", "recent"]):
             return RouteDecision(
                 mode=SearchMode.TEMPORAL,

@@ -26,10 +26,15 @@ dev = [
   "ruff>=0.6.0",
   "mypy>=1.11.0",
 ]
+temporal = [
+  "temporalio>=1.9.0",
+  "nexusrpc>=0.3.0",
+]
 opt = [
   "dspy>=2.6.0",
   "adalflow>=0.6.0",
   "cognee>=0.1.0",
+  "datasketch>=1.6.0",
 ]
 demo = [
   "playwright>=1.49.0",

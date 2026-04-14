@@ -3,10 +3,13 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
+from app.core.config import settings
 from app.core.logging import configure_logging
 from app.domain.models import QueryRequest
 from app.integrations.cognee_client import CogneeClient
+from app.services.cache import ContentAddressedCache
 from app.services.evidence import EvidencePacker
+from app.services.normalizer import QueryNormalizer
 from app.services.orchestrator import QueryOrchestrator
 from app.services.router import QueryRouter
 from app.services.runtime_controller import RuntimeController
@@ -18,11 +21,20 @@ _STATIC = _REPO_ROOT / "static"
 
 app = FastAPI(title="Roubaix API", version="0.1.0")
 
+_normalizer = QueryNormalizer()
+_cache = ContentAddressedCache(
+    max_size=settings.cache_max_size,
+    default_ttl_s=settings.cache_default_ttl_s,
+    freshness_ttl_s=settings.cache_freshness_ttl_s,
+)
+
 orchestrator = QueryOrchestrator(
-    router=QueryRouter(),
+    router=QueryRouter(normalizer=_normalizer),
     cognee_client=CogneeClient(),
     evidence_packer=EvidencePacker(),
     runtime_controller=RuntimeController(),
+    normalizer=_normalizer,
+    cache=_cache,
 )
 
 
