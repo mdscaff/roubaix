@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Roubaix — Demo</title>
   <style>
-    :root {
+    :root, [data-theme="dark"] {
       --bg: #0c0f14;
       --panel: #141a22;
       --border: #243042;
@@ -15,12 +15,29 @@
       --accent-dim: #1e4a8a;
       --good: #34d399;
       --warn: #fbbf24;
+      --code-bg: #080a0e;
+      --code-text: #c8d4e0;
+      --gradient-spot: #1a2340;
+    }
+    [data-theme="light"] {
+      --bg: #f4f6f9;
+      --panel: #ffffff;
+      --border: #d4dae3;
+      --text: #1a1f2b;
+      --muted: #5c6878;
+      --accent: #2563eb;
+      --accent-dim: #a3bffa;
+      --good: #059669;
+      --warn: #d97706;
+      --code-bg: #edf0f4;
+      --code-text: #334155;
+      --gradient-spot: #dbeafe;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-      background: radial-gradient(1200px 600px at 10% -10%, #1a2340 0%, var(--bg) 55%);
+      background: radial-gradient(1200px 600px at 10% -10%, var(--gradient-spot) 0%, var(--bg) 55%);
       color: var(--text);
       line-height: 1.55;
     }
@@ -115,13 +132,13 @@
     pre#demo-result {
       margin: 1rem 0 0;
       padding: 1rem;
-      background: #080a0e;
+      background: var(--code-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
       overflow-x: auto;
       font-size: 0.78rem;
       line-height: 1.45;
-      color: #c8d4e0;
+      color: var(--code-text);
       min-height: 4rem;
       white-space: pre-wrap;
       word-break: break-word;
@@ -132,9 +149,49 @@
       color: var(--muted);
       font-size: 0.85rem;
     }
+    .theme-toggle {
+      position: fixed;
+      top: 1rem;
+      right: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      z-index: 100;
+    }
+    .theme-toggle .icon { font-size: 0.95rem; line-height: 1; }
+    .theme-toggle input { display: none; }
+    .theme-toggle .track {
+      width: 40px;
+      height: 22px;
+      border-radius: 999px;
+      background: var(--border);
+      position: relative;
+      cursor: pointer;
+      transition: background 0.25s;
+    }
+    .theme-toggle .track::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--text);
+      transition: transform 0.25s;
+    }
+    .theme-toggle input:checked + .track { background: var(--accent); }
+    .theme-toggle input:checked + .track::after { transform: translateX(18px); }
   </style>
 </head>
 <body>
+  <label class="theme-toggle" title="Toggle light / dark theme">
+    <span class="icon">☀️</span>
+    <input type="checkbox" id="theme-switch" />
+    <span class="track"></span>
+    <span class="icon">🌙</span>
+  </label>
+
   <header id="hero">
     <span class="badge">Graph-aware retrieval</span>
     <h1>Roubaix</h1>
@@ -160,7 +217,7 @@
       <div class="grid-2">
         <div class="metric">
           <div class="label">Cost efficiency</div>
-          <div class="value">Lower $ / good answer</div>
+          <div class="value">Lower $ / best answer</div>
         </div>
         <div class="metric">
           <div class="label">Speed</div>
@@ -173,6 +230,38 @@
         <div class="metric">
           <div class="label">Trust</div>
           <div class="value">Fresh when it matters</div>
+        </div>
+        <div class="metric">
+          <div class="label">Auditability</div>
+          <div class="value">Every decision traced to spend</div>
+        </div>
+        <div class="metric">
+          <div class="label">Escalation control</div>
+          <div class="value">Expensive modes only when needed</div>
+        </div>
+        <div class="metric">
+          <div class="label">Optimize without redeploy</div>
+          <div class="value">DSPy/GEPA configs promoted via flag</div>
+        </div>
+        <div class="metric">
+          <div class="label">Predictable scaling</div>
+          <div class="value">Token budgets cap per-query cost</div>
+        </div>
+        <div class="metric">
+          <div class="label">Multi-hop accuracy</div>
+          <div class="value">Graph depth for relationship queries</div>
+        </div>
+        <div class="metric">
+          <div class="label">Temporal correctness</div>
+          <div class="value">Verifiably current answers</div>
+        </div>
+        <div class="metric">
+          <div class="label">Agent-safe extensibility</div>
+          <div class="value">Coding agents can navigate &amp; extend</div>
+        </div>
+        <div class="metric">
+          <div class="label">Answer success rate</div>
+          <div class="value">Fewer failed or empty responses</div>
         </div>
       </div>
     </section>
@@ -196,6 +285,19 @@
   </footer>
 
   <script>
+    const themeSwitch = document.getElementById("theme-switch");
+    const saved = localStorage.getItem("roubaix-theme");
+    const prefersDark = !saved
+      ? window.matchMedia("(prefers-color-scheme: dark)").matches
+      : saved === "dark";
+    document.documentElement.dataset.theme = prefersDark ? "dark" : "light";
+    themeSwitch.checked = prefersDark;
+    themeSwitch.addEventListener("change", () => {
+      const theme = themeSwitch.checked ? "dark" : "light";
+      document.documentElement.dataset.theme = theme;
+      localStorage.setItem("roubaix-theme", theme);
+    });
+
     const btn = document.getElementById("run-demo");
     const out = document.getElementById("demo-result");
     const status = document.getElementById("demo-status");
