@@ -84,6 +84,9 @@ def build_cognee_env_overrides() -> dict[str, str]:
     if settings.graph_database_provider and not os.getenv("GRAPH_DATABASE_PROVIDER"):
         overrides["GRAPH_DATABASE_PROVIDER"] = settings.graph_database_provider
 
+    if settings.app_env == "development" and not os.getenv("ENABLE_BACKEND_ACCESS_CONTROL"):
+        overrides["ENABLE_BACKEND_ACCESS_CONTROL"] = "false"
+
     return overrides
 
 
@@ -112,6 +115,15 @@ def register_pggraph_adapter() -> bool:
     return True
 
 
+def _try_import_cognee() -> Any | None:
+    try:
+        import cognee  # type: ignore[import-not-found]
+
+        return cognee
+    except ImportError:
+        return None
+
+
 def configure_cognee() -> dict[str, Any]:
     """Apply env bridges and runtime Cognee config. Idempotent per process."""
     global _COGNEE_STATUS
@@ -122,9 +134,8 @@ def configure_cognee() -> dict[str, Any]:
 
     overrides = apply_cognee_env_overrides()
 
-    try:
-        import cognee  # type: ignore[import-not-found]
-    except ImportError:
+    cognee = _try_import_cognee()
+    if cognee is None:
         _COGNEE_STATUS = {
             "configured": False,
             "reason": "cognee_not_installed",

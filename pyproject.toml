@@ -43,6 +43,10 @@ demo = [
 eval = [
   "langfuse>=2.0.0",
 ]
+pggraph = [
+  "asyncpg>=0.30.0",
+  "cognee-community-graph-adapter-pggraph @ git+https://github.com/topoteretes/cognee-community.git#subdirectory=packages/graph/pggraph",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
@@ -56,6 +60,10 @@ strict = false
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["cognee", "cognee.*", "cognee_community_graph_adapter_pggraph"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

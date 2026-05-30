@@ -1,3 +1,4 @@
+from app.core.config import settings
 from app.domain.models import PackedEvidence, QueryRequest, RouteDecision, SearchMode
 
 
@@ -13,8 +14,9 @@ class RuntimeController:
     ) -> tuple[bool, RouteDecision | None]:
         if packed.evidence_items:
             return True, None
-        if retry_count >= 2:
-            return True, None
+        if retry_count >= settings.max_retries:
+            return False, None
+
         fallback_mode = SearchMode.GRAPH_COMPLETION if route.mode == SearchMode.CHUNKS else SearchMode.CHUNKS
         return False, RouteDecision(
             mode=fallback_mode,

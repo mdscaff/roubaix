@@ -49,7 +49,7 @@ def test_build_cognee_env_overrides_from_openrouter(monkeypatch: pytest.MonkeyPa
 
 
 def test_configure_cognee_without_install(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cognee_setup, "register_pggraph_adapter", lambda: False)
+    monkeypatch.setattr(cognee_setup, "_try_import_cognee", lambda: None)
     status = cognee_setup.configure_cognee()
     assert status["configured"] is False
     assert status["reason"] == "cognee_not_installed"

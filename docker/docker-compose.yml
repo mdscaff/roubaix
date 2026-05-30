@@ -1,0 +1,22 @@
+# Local Postgres for Cognee + pgGraph development.
+# See .env.example for DB_* / GRAPH_DATABASE_* variables (port 5433).
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: roubaix-postgres
+    environment:
+      POSTGRES_USER: cognee
+      POSTGRES_PASSWORD: cognee
+      POSTGRES_DB: cognee
+    ports:
+      - "5433:5432"
+    volumes:
+      - roubaix_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognee -d cognee"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  roubaix_pg_data:
