@@ -46,3 +46,21 @@ class QueryRouter:
             evidence_budget=8,
             rationale="default low-cost retrieval",
         )
+
+
+class ForcedModeRouter(QueryRouter):
+    """Fixed SearchMode router for monolithic eval baselines."""
+
+    def __init__(self, mode: SearchMode, evidence_budget: int = 8) -> None:
+        super().__init__()
+        self._forced_mode = mode
+        self._evidence_budget = evidence_budget
+
+    def route(self, request: QueryRequest) -> RouteDecision:
+        return RouteDecision(
+            mode=self._forced_mode,
+            node_sets=[],
+            evidence_budget=self._evidence_budget,
+            requires_freshness_validation=request.freshness_required,
+            rationale=f"forced baseline mode: {self._forced_mode.value}",
+        )

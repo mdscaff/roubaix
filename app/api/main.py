@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.core.logging import configure_logging
 from app.domain.models import QueryRequest
 from app.integrations.cognee_client import CogneeClient
+from app.integrations.cognee_setup import configure_cognee, get_cognee_status
 from app.services.cache import ContentAddressedCache
 from app.services.evidence import EvidencePacker
 from app.services.normalizer import QueryNormalizer
@@ -15,6 +16,7 @@ from app.services.router import QueryRouter
 from app.services.runtime_controller import RuntimeController
 
 configure_logging()
+configure_cognee()
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _STATIC = _REPO_ROOT / "static"
@@ -39,8 +41,8 @@ orchestrator = QueryOrchestrator(
 
 
 @app.get("/healthz")
-async def healthz() -> dict[str, str]:
-    return {"status": "ok"}
+async def healthz() -> dict[str, object]:
+    return {"status": "ok", "cognee": get_cognee_status()}
 
 
 @app.get("/demo")
