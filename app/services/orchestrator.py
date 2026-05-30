@@ -9,6 +9,8 @@ Inspired by HyperSpace AGI architect-v1 four-layer resolution:
 Layer 3 (MinHash similarity) will be added in Phase 2.
 """
 
+from typing import cast
+
 from app.domain.models import AnswerResult, QueryRequest, RouteDecision
 from app.integrations.cognee_client import CogneeClient
 from app.observability.metrics import metrics
@@ -48,8 +50,10 @@ class QueryOrchestrator:
         cached = self.cache.get(cache_key)
         if cached is not None:
             metrics.increment("cache:hit")
-            hit = cached.model_copy(update={"cache_hit": True})
-            return hit
+            return cast(
+                AnswerResult,
+                cached.model_copy(update={"cache_hit": True}),
+            )
 
         metrics.increment("cache:miss")
 

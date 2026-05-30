@@ -1,4 +1,4 @@
-from app.domain.models import PackedEvidence, QueryRequest, RetrievalResult, RouteDecision, SearchMode
+from app.domain.models import PackedEvidence, QueryRequest, RouteDecision, SearchMode
 
 
 class RuntimeController:
