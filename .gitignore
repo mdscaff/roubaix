@@ -6,5 +6,6 @@ __pycache__/
 .ruff_cache/
 .env
 *.pyc
+.DS_Store
 dist/
 evals/runs/

@@ -3,13 +3,17 @@
 
 Requires: ffmpeg on PATH, optional deps: pip install -e '.[demo]' && playwright install chromium
 
+The demo page supports ``?record=1&duration=SECONDS`` for a seek-based animation timeline
+(smooth scroll, zoom in/out, section highlights, live API reveal). Frames are captured at
+24 fps and muxed with narration audio.
+
 Environment (optional narration):
   ELEVENLABS_API_KEY   — use ElevenLabs instead of Edge TTS
   ELEVENLABS_VOICE_ID  — voice id (default: 21m00Tcm4TlvDq8ikWAM Rachel)
 
 Outputs:
   dist/demo_narration.mp3
-  dist/demo_raw.webm
+  dist/demo_raw.mp4
   dist/roubaix_demo.mp4
 """
 
@@ -34,6 +38,7 @@ SCRIPTS = REPO_ROOT / "scripts"
 NARRATION_FILE = SCRIPTS / "demo_narration.txt"
 DEFAULT_PORT = 8899
 HOST = "127.0.0.1"
+RECORD_FPS = 24
 
 
 def _ffprobe_duration_seconds(path: Path) -> float | None:
@@ -121,53 +126,60 @@ def _start_server(port: int) -> subprocess.Popen:
     )
 
 
-def _record_playwright(port: int, target_seconds: float, out_webm: Path) -> None:
+def _record_timeline(port: int, duration_s: float, out_video: Path) -> None:
+    """Capture seek-based demo animation as a silent MP4."""
     from playwright.sync_api import sync_playwright
 
-    url = f"http://{HOST}:{port}/demo"
-    total_ms = max(int(target_seconds * 1000), 35_000)
-    # Sum of scripted waits before padding (keep in sync with waits below).
-    scripted_ms = 800 + 2200 + 2200 + 1200 + 3500 + 1500
-    pad = max(0, total_ms - scripted_ms)
+    frames_dir = DIST / "frames"
+    if frames_dir.exists():
+        shutil.rmtree(frames_dir)
+    frames_dir.mkdir(parents=True)
 
-    record_dir = DIST / "pw_record"
-    record_dir.mkdir(parents=True, exist_ok=True)
-    for old in record_dir.glob("*.webm"):
-        old.unlink()
+    url = f"http://{HOST}:{port}/demo?record=1&duration={duration_s:.2f}"
+    total_frames = max(1, int(round(duration_s * RECORD_FPS)))
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            record_video_dir=str(record_dir),
-            record_video_size={"width": 1280, "height": 720},
-        )
+        context = browser.new_context(viewport={"width": 1280, "height": 720})
         page = context.new_page()
-        page.set_default_timeout(60_000)
-        page.goto(url, wait_until="domcontentloaded")
-        page.wait_for_timeout(800)
+        page.set_default_timeout(120_000)
+        page.goto(url, wait_until="networkidle")
+        page.wait_for_function("window.__demoRecorderReady === true")
 
-        page.locator("#problems").scroll_into_view_if_needed()
-        page.wait_for_timeout(2200)
-        page.locator("#outcomes").scroll_into_view_if_needed()
-        page.wait_for_timeout(2200)
-        page.locator("#live-demo").scroll_into_view_if_needed()
-        page.wait_for_timeout(1200)
-        page.locator("#run-demo").click()
-        page.wait_for_timeout(3500)
-
-        page.wait_for_timeout(pad)
-
-        page.locator("#demo-result").scroll_into_view_if_needed()
-        page.wait_for_timeout(1500)
+        for frame_idx in range(total_frames):
+            t = frame_idx / RECORD_FPS
+            page.evaluate("(t) => window.__demoRecorder.seek(t)", t)
+            page.wait_for_timeout(16)
+            page.screenshot(
+                path=str(frames_dir / f"frame_{frame_idx:06d}.png"),
+                type="png",
+                animations="disabled",
+            )
 
         context.close()
         browser.close()
 
-    candidates = list(record_dir.glob("*.webm"))
-    if not candidates:
-        raise RuntimeError("No WebM recorded; run: python -m playwright install chromium")
-    latest = max(candidates, key=lambda p: p.stat().st_mtime)
-    shutil.move(str(latest), str(out_webm))
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-framerate",
+        str(RECORD_FPS),
+        "-i",
+        str(frames_dir / "frame_%06d.png"),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "20",
+        "-pix_fmt",
+        "yuv420p",
+        str(out_video),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        print(proc.stderr or proc.stdout, file=sys.stderr)
+        proc.check_returncode()
 
 
 def _mux_mp4(video: Path, audio: Path, out_mp4: Path) -> None:
@@ -179,13 +191,7 @@ def _mux_mp4(video: Path, audio: Path, out_mp4: Path) -> None:
         "-i",
         str(audio),
         "-c:v",
-        "libx264",
-        "-preset",
-        "fast",
-        "-crf",
-        "23",
-        "-pix_fmt",
-        "yuv420p",
+        "copy",
         "-c:a",
         "aac",
         "-b:a",
@@ -217,6 +223,11 @@ def main() -> int:
         help="Narration backend (default: edge / Microsoft Edge TTS, no API key)",
     )
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Temporary API port")
+    parser.add_argument(
+        "--keep-frames",
+        action="store_true",
+        help="Keep dist/frames/ after encoding (debug)",
+    )
     args = parser.parse_args()
 
     if not NARRATION_FILE.is_file():
@@ -230,7 +241,7 @@ def main() -> int:
 
     DIST.mkdir(parents=True, exist_ok=True)
     audio_path = DIST / "demo_narration.mp3"
-    raw_video = DIST / "demo_raw.webm"
+    raw_video = DIST / "demo_raw.mp4"
     out_mp4 = DIST / "roubaix_demo.mp4"
 
     print("Generating narration…")
@@ -244,13 +255,13 @@ def main() -> int:
         return 1
 
     duration = _ffprobe_duration_seconds(audio_path) or 55.0
-    print(f"Narration duration: {duration:.1f}s — pacing browser recording to match")
+    print(f"Narration duration: {duration:.1f}s — recording {int(duration * RECORD_FPS)} frames at {RECORD_FPS} fps")
 
     proc = _start_server(args.port)
     try:
         _wait_for_health(args.port)
-        print("Recording browser session…")
-        _record_playwright(args.port, target_seconds=duration + 2.0, out_webm=raw_video)
+        print("Recording animated demo timeline…")
+        _record_timeline(args.port, duration_s=duration, out_video=raw_video)
     finally:
         proc.send_signal(signal.SIGTERM)
         try:
@@ -258,12 +269,15 @@ def main() -> int:
         except subprocess.TimeoutExpired:
             proc.kill()
 
+    if not args.keep_frames:
+        shutil.rmtree(DIST / "frames", ignore_errors=True)
+
     if not which("ffmpeg"):
         print("ffmpeg not found on PATH; audio+video mux skipped.", file=sys.stderr)
-        print(f"Raw WebM: {raw_video}\nAudio: {audio_path}", file=sys.stderr)
+        print(f"Raw video: {raw_video}\nAudio: {audio_path}", file=sys.stderr)
         return 0
 
-    print("Muxing MP4 with ffmpeg…")
+    print("Muxing final MP4 with narration…")
     try:
         _mux_mp4(raw_video, audio_path, out_mp4)
     except subprocess.CalledProcessError as e:

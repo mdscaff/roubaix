@@ -1,9 +1,11 @@
-Welcome to Roubaix—a build-ready experiment in graph-aware enterprise retrieval.
+Welcome to Roubaix—an experiment in measurable, graph-aware enterprise retrieval.
 
-Here are the problems we are attacking. First, runaway cost: many AI stacks default to the most expensive retrieval path on every question. Second, relationship-heavy questions get shallow keyword answers when they need graph depth. Third, time-sensitive answers go stale without explicit freshness handling. And fourth, leadership lacks an audit trail that ties spend to routing decisions.
+Every AI stack faces the same pressure: runaway cost when every question hits the most expensive path, shallow answers on relationship queries, stale responses on time-sensitive topics, and no audit trail tying spend to routing decisions.
 
-The business outcomes we are driving toward are measurable: lower cost per successful answer, lower latency by using the right path first, higher quality on multi-hop and relationship questions, and higher trust when answers must be current.
+Roubaix attacks those problems with deterministic routing first. Simple questions go to chunk search. Relationship questions escalate to graph or triplet modes. Freshness-sensitive queries get shorter cache TTL and explicit validation. Every answer carries telemetry—retrieval mode, latency, token estimates, and retry count—so leadership can connect cost to quality.
 
-On this page you will see a live call into our API. The response includes which retrieval mode was selected—transparency you can connect to cost and quality reporting.
+Phase one is now wired end to end. Cognee retrieval runs through a live SDK path with a safe stub fallback for CI. Synthesis goes through OpenRouter with a cache-friendly prompt split. The runtime controller fails closed when evidence is empty instead of hallucinating. A JSONL eval harness compares baselines, and Postgres plus pgGraph is ready for local graph storage.
 
-This scaffold uses deterministic routing today, with DSPy and GEPA optimization and AdalFlow-style runtime control on the roadmap. Thank you for watching.
+On this page, watch a live call into POST slash answer. The JSON response shows which mode was selected, how long retrieval and synthesis took, and whether the cache was hit—transparency you can benchmark, not just claim.
+
+DSPy and GEPA optimization and AdalFlow-style runtime control remain on the roadmap. Thank you for watching Roubaix.

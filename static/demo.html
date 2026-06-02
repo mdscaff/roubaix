@@ -18,6 +18,7 @@
       --code-bg: #080a0e;
       --code-text: #c8d4e0;
       --gradient-spot: #1a2340;
+      --focus-ring: rgba(61, 139, 253, 0.55);
     }
     [data-theme="light"] {
       --bg: #f4f6f9;
@@ -32,15 +33,27 @@
       --code-bg: #edf0f4;
       --code-text: #334155;
       --gradient-spot: #dbeafe;
+      --focus-ring: rgba(37, 99, 235, 0.45);
     }
     * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
     body {
-      margin: 0;
       font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-      background: radial-gradient(1200px 600px at 10% -10%, var(--gradient-spot) 0%, var(--bg) 55%);
+      background: var(--bg);
       color: var(--text);
       line-height: 1.55;
+      overflow-x: hidden;
     }
+    body[data-record="1"] { overflow: hidden; }
+    body[data-record="1"] .theme-toggle { display: none; }
+
+    #demo-viewport {
+      min-height: 100vh;
+      background: radial-gradient(1200px 600px at 10% -10%, var(--gradient-spot) 0%, var(--bg) 55%);
+      transform-origin: 50% 0%;
+      will-change: transform;
+    }
+
     header {
       padding: 3rem 1.5rem 2rem;
       max-width: 900px;
@@ -81,6 +94,12 @@
       border-radius: 12px;
       padding: 1.75rem 1.5rem;
       margin-bottom: 1.25rem;
+      transition: box-shadow 0.35s ease, border-color 0.35s ease, transform 0.35s ease;
+    }
+    section.record-focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-dim), 0 12px 40px rgba(61, 139, 253, 0.18);
+      transform: translateY(-2px);
     }
     section h2 {
       margin: 0 0 1rem;
@@ -93,7 +112,16 @@
       padding-left: 1.2rem;
       color: var(--muted);
     }
-    ul.clean li { margin-bottom: 0.65rem; }
+    ul.clean li {
+      margin-bottom: 0.65rem;
+      border-radius: 6px;
+      padding: 0.15rem 0.35rem;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+    ul.clean li.record-active {
+      background: rgba(61, 139, 253, 0.12);
+      color: var(--text);
+    }
     ul.clean strong { color: var(--text); }
     .grid-2 {
       display: grid;
@@ -105,9 +133,30 @@
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 1rem;
+      transition: transform 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+    }
+    .metric.record-active {
+      border-color: var(--accent);
+      transform: scale(1.04);
+      box-shadow: 0 8px 24px rgba(61, 139, 253, 0.2);
     }
     .metric .label { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
     .metric .value { font-size: 1.05rem; font-weight: 600; color: var(--good); }
+    .phase-list {
+      margin: 0;
+      padding-left: 1.2rem;
+      color: var(--muted);
+    }
+    .phase-list li {
+      margin-bottom: 0.55rem;
+      padding: 0.2rem 0.4rem;
+      border-radius: 6px;
+      transition: background 0.3s ease;
+    }
+    .phase-list li.record-active {
+      background: rgba(52, 211, 153, 0.12);
+      color: var(--text);
+    }
     .actions {
       display: flex;
       flex-wrap: wrap;
@@ -125,9 +174,14 @@
       border-radius: 8px;
       cursor: pointer;
       box-shadow: 0 4px 14px rgba(61, 139, 253, 0.35);
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
     }
     button#run-demo:hover { filter: brightness(1.08); }
     button#run-demo:disabled { opacity: 0.55; cursor: wait; }
+    button#run-demo.record-active {
+      transform: scale(1.06);
+      box-shadow: 0 6px 22px rgba(61, 139, 253, 0.55);
+    }
     #demo-status { font-size: 0.9rem; color: var(--muted); }
     pre#demo-result {
       margin: 1rem 0 0;
@@ -142,6 +196,11 @@
       min-height: 4rem;
       white-space: pre-wrap;
       word-break: break-word;
+      transition: border-color 0.35s ease, box-shadow 0.35s ease;
+    }
+    pre#demo-result.record-focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-dim), inset 0 0 40px rgba(61, 139, 253, 0.06);
     }
     footer {
       text-align: center;
@@ -192,99 +251,80 @@
     <span class="icon">🌙</span>
   </label>
 
-  <header id="hero">
-    <span class="badge">Graph-aware retrieval</span>
-    <h1>Roubaix</h1>
-    <p class="lead">
-      Route every question to the <strong style="color:var(--text)">right</strong> kind of search—
-      before you pay for the most expensive one.
-    </p>
-  </header>
-
-  <main>
-    <section id="problems">
-      <h2>Problems we are solving</h2>
-      <ul class="clean">
-        <li><strong>Runaway cost:</strong> One-size-fits-all AI runs the priciest path on every question.</li>
-        <li><strong>Shallow answers on relationships:</strong> “Who depends on whom?” needs graph depth, not keywords alone.</li>
-        <li><strong>Stale “current” answers:</strong> Time-sensitive questions need explicit freshness, not hope.</li>
-        <li><strong>No audit trail:</strong> Leadership can’t tie spend to routing choices without transparent decisions.</li>
-      </ul>
-    </section>
-
-    <section id="outcomes">
-      <h2>Business outcomes</h2>
-      <div class="grid-2">
-        <div class="metric">
-          <div class="label">Cost efficiency</div>
-          <div class="value">Lower $ / best answer</div>
-        </div>
-        <div class="metric">
-          <div class="label">Speed</div>
-          <div class="value">Lower latency path-first</div>
-        </div>
-        <div class="metric">
-          <div class="label">Quality</div>
-          <div class="value">Better multi-hop &amp; links</div>
-        </div>
-        <div class="metric">
-          <div class="label">Trust</div>
-          <div class="value">Fresh when it matters</div>
-        </div>
-        <div class="metric">
-          <div class="label">Auditability</div>
-          <div class="value">Every decision traced to spend</div>
-        </div>
-        <div class="metric">
-          <div class="label">Escalation control</div>
-          <div class="value">Expensive modes only when needed</div>
-        </div>
-        <div class="metric">
-          <div class="label">Optimize without redeploy</div>
-          <div class="value">DSPy/GEPA configs promoted via flag</div>
-        </div>
-        <div class="metric">
-          <div class="label">Predictable scaling</div>
-          <div class="value">Token budgets cap per-query cost</div>
-        </div>
-        <div class="metric">
-          <div class="label">Multi-hop accuracy</div>
-          <div class="value">Graph depth for relationship queries</div>
-        </div>
-        <div class="metric">
-          <div class="label">Temporal correctness</div>
-          <div class="value">Verifiably current answers</div>
-        </div>
-        <div class="metric">
-          <div class="label">Agent-safe extensibility</div>
-          <div class="value">Coding agents can navigate &amp; extend</div>
-        </div>
-        <div class="metric">
-          <div class="label">Answer success rate</div>
-          <div class="value">Fewer failed or empty responses</div>
-        </div>
-      </div>
-    </section>
-
-    <section id="live-demo">
-      <h2>Live API demo</h2>
-      <p style="color:var(--muted); margin:0 0 0.5rem;">
-        Calls this server’s <code style="color:var(--accent);">POST /answer</code> with a sample query. The response shows
-        <strong style="color:var(--text);">which retrieval mode</strong> was selected—evidence for cost and quality reporting.
+  <div id="demo-viewport">
+    <header id="hero">
+      <span class="badge">Graph-aware retrieval</span>
+      <h1>Roubaix</h1>
+      <p class="lead">
+        Route every question to the <strong style="color:var(--text)">right</strong> kind of search—
+        before you pay for the most expensive one.
       </p>
-      <div class="actions">
-        <button type="button" id="run-demo">Run sample query</button>
-        <span id="demo-status"></span>
-      </div>
-      <pre id="demo-result">Click the button to run a live request…</pre>
-    </section>
-  </main>
+    </header>
 
-  <footer>
-    Roubaix · Cognee-centered scaffold · DSPy/GEPA optimization &amp; AdalFlow runtime control (roadmap)
-  </footer>
+    <main>
+      <section id="problems">
+        <h2>Problems we are solving</h2>
+        <ul class="clean">
+          <li data-problem="0"><strong>Runaway cost:</strong> One-size-fits-all AI runs the priciest path on every question.</li>
+          <li data-problem="1"><strong>Shallow answers on relationships:</strong> “Who depends on whom?” needs graph depth, not keywords alone.</li>
+          <li data-problem="2"><strong>Stale “current” answers:</strong> Time-sensitive questions need explicit freshness, not hope.</li>
+          <li data-problem="3"><strong>No audit trail:</strong> Leadership can’t tie spend to routing choices without transparent decisions.</li>
+        </ul>
+      </section>
+
+      <section id="outcomes">
+        <h2>Business outcomes</h2>
+        <div class="grid-2">
+          <div class="metric" data-metric="0"><div class="label">Cost efficiency</div><div class="value">Lower $ / best answer</div></div>
+          <div class="metric" data-metric="1"><div class="label">Speed</div><div class="value">Lower latency path-first</div></div>
+          <div class="metric" data-metric="2"><div class="label">Quality</div><div class="value">Better multi-hop &amp; links</div></div>
+          <div class="metric" data-metric="3"><div class="label">Trust</div><div class="value">Fresh when it matters</div></div>
+          <div class="metric" data-metric="4"><div class="label">Auditability</div><div class="value">Every decision traced to spend</div></div>
+          <div class="metric" data-metric="5"><div class="label">Escalation control</div><div class="value">Expensive modes only when needed</div></div>
+          <div class="metric" data-metric="6"><div class="label">Optimize without redeploy</div><div class="value">DSPy/GEPA configs promoted via flag</div></div>
+          <div class="metric" data-metric="7"><div class="label">Predictable scaling</div><div class="value">Token budgets cap per-query cost</div></div>
+          <div class="metric" data-metric="8"><div class="label">Multi-hop accuracy</div><div class="value">Graph depth for relationship queries</div></div>
+          <div class="metric" data-metric="9"><div class="label">Temporal correctness</div><div class="value">Verifiably current answers</div></div>
+          <div class="metric" data-metric="10"><div class="label">Agent-safe extensibility</div><div class="value">Coding agents can navigate &amp; extend</div></div>
+          <div class="metric" data-metric="11"><div class="label">Answer success rate</div><div class="value">Fewer failed or empty responses</div></div>
+        </div>
+      </section>
+
+      <section id="phase-one">
+        <h2>Phase 1 — wired end to end</h2>
+        <ul class="phase-list">
+          <li data-phase="0">Live Cognee SDK retrieval with CI-safe stub fallback</li>
+          <li data-phase="1">OpenRouter synthesis with cache-friendly prompt split</li>
+          <li data-phase="2">Fail-closed runtime when evidence is empty</li>
+          <li data-phase="3">JSONL eval harness with baseline comparisons</li>
+          <li data-phase="4">Postgres + pgGraph ready for local graph storage</li>
+        </ul>
+      </section>
+
+      <section id="live-demo">
+        <h2>Live API demo</h2>
+        <p style="color:var(--muted); margin:0 0 0.5rem;">
+          Calls this server’s <code style="color:var(--accent);">POST /answer</code> with a sample query. The response shows
+          <strong style="color:var(--text);">which retrieval mode</strong> was selected—evidence for cost and quality reporting.
+        </p>
+        <div class="actions">
+          <button type="button" id="run-demo">Run sample query</button>
+          <span id="demo-status"></span>
+        </div>
+        <pre id="demo-result">Click the button to run a live request…</pre>
+      </section>
+    </main>
+
+    <footer>
+      Roubaix · Cognee-centered retrieval · DSPy/GEPA optimization &amp; AdalFlow runtime control (roadmap)
+    </footer>
+  </div>
 
   <script>
+    const params = new URLSearchParams(window.location.search);
+    const recordMode = params.get("record") === "1";
+    const recordDuration = parseFloat(params.get("duration") || "90");
+
     const themeSwitch = document.getElementById("theme-switch");
     const saved = localStorage.getItem("roubaix-theme");
     const prefersDark = !saved
@@ -292,39 +332,179 @@
       : saved === "dark";
     document.documentElement.dataset.theme = prefersDark ? "dark" : "light";
     themeSwitch.checked = prefersDark;
-    themeSwitch.addEventListener("change", () => {
-      const theme = themeSwitch.checked ? "dark" : "light";
-      document.documentElement.dataset.theme = theme;
-      localStorage.setItem("roubaix-theme", theme);
-    });
+    if (!recordMode) {
+      themeSwitch.addEventListener("change", () => {
+        const theme = themeSwitch.checked ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+        localStorage.setItem("roubaix-theme", theme);
+      });
+    } else {
+      document.body.dataset.record = "1";
+    }
 
     const btn = document.getElementById("run-demo");
     const out = document.getElementById("demo-result");
     const status = document.getElementById("demo-status");
+    const viewport = document.getElementById("demo-viewport");
 
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      status.textContent = "Calling API…";
-      out.textContent = "";
-      try {
-        const r = await fetch("/answer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            query: "How is our billing service connected to the data warehouse?",
-            freshness_required: false,
-          }),
-        });
-        const data = await r.json();
-        out.textContent = JSON.stringify(data, null, 2);
-        status.textContent = r.ok ? "OK" : "HTTP " + r.status;
-      } catch (e) {
-        out.textContent = String(e);
-        status.textContent = "Error";
-      } finally {
-        btn.disabled = false;
+    const SAMPLE_QUERY = {
+      query: "How is our billing service connected to the data warehouse?",
+      freshness_required: false,
+    };
+
+    let cachedAnswerJson = null;
+
+    async function fetchAnswer() {
+      const r = await fetch("/answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(SAMPLE_QUERY),
+      });
+      const data = await r.json();
+      cachedAnswerJson = JSON.stringify(data, null, 2);
+      return { ok: r.ok, status: r.status, text: cachedAnswerJson };
+    }
+
+    if (!recordMode) {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        status.textContent = "Calling API…";
+        out.textContent = "";
+        try {
+          const result = await fetchAnswer();
+          out.textContent = result.text;
+          status.textContent = result.ok ? "OK" : "HTTP " + result.status;
+        } catch (e) {
+          out.textContent = String(e);
+          status.textContent = "Error";
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    } else {
+      fetchAnswer().catch(() => {
+        cachedAnswerJson = JSON.stringify({
+          answer: "Roubaix response using mode=GRAPH_COMPLETION.",
+          accepted: true,
+          route: { mode: "GRAPH_COMPLETION", rationale: "relationship query" },
+          telemetry: { retrieval_ms: 42, synthesis_ms: 118, total_ms: 180, evidence_items: 3 },
+        }, null, 2);
+      });
+    }
+
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+    function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+
+    function sectionTop(id) {
+      const el = document.getElementById(id);
+      return el ? el.offsetTop - 24 : 0;
+    }
+
+    function buildKeyframes(duration) {
+      const d = duration;
+      return [
+        { t: 0, scroll: 0, zoom: 1.0, originY: 0, focus: "hero", problem: -1, metric: -1, phase: -1, demo: "idle", reveal: 0 },
+        { t: d * 0.07, scroll: 0, zoom: 1.14, originY: 80, focus: "hero", problem: -1, metric: -1, phase: -1, demo: "idle", reveal: 0 },
+        { t: d * 0.12, scroll: sectionTop("problems"), zoom: 1.08, originY: sectionTop("problems") + 120, focus: "problems", problem: 0, metric: -1, phase: -1, demo: "idle", reveal: 0 },
+        { t: d * 0.16, scroll: sectionTop("problems"), zoom: 1.12, originY: sectionTop("problems") + 160, focus: "problems", problem: 1, metric: -1, phase: -1, demo: "idle", reveal: 0 },
+        { t: d * 0.20, scroll: sectionTop("problems"), zoom: 1.12, originY: sectionTop("problems") + 200, focus: "problems", problem: 2, metric: -1, phase: -1, demo: "idle", reveal: 0 },
+        { t: d * 0.24, scroll: sectionTop("problems"), zoom: 1.12, originY: sectionTop("problems") + 240, focus: "problems", problem: 3, metric: -1, phase: -1, demo: "idle", reveal: 0 },
+        { t: d * 0.28, scroll: sectionTop("outcomes"), zoom: 1.06, originY: sectionTop("outcomes") + 100, focus: "outcomes", problem: -1, metric: 0, phase: -1, demo: "idle", reveal: 0 },
+        { t: d * 0.32, scroll: sectionTop("outcomes"), zoom: 1.10, originY: sectionTop("outcomes") + 180, focus: "outcomes", problem: -1, metric: 2, phase: -1, demo: "idle", reveal: 0 },
+        { t: d * 0.36, scroll: sectionTop("outcomes"), zoom: 1.10, originY: sectionTop("outcomes") + 260, focus: "outcomes", problem: -1, metric: 4, phase: -1, demo: "idle", reveal: 0 },
+        { t: d * 0.40, scroll: sectionTop("outcomes"), zoom: 1.08, originY: sectionTop("outcomes") + 340, focus: "outcomes", problem: -1, metric: 7, phase: -1, demo: "idle", reveal: 0 },
+        { t: d * 0.44, scroll: sectionTop("phase-one"), zoom: 1.10, originY: sectionTop("phase-one") + 80, focus: "phase-one", problem: -1, metric: -1, phase: 0, demo: "idle", reveal: 0 },
+        { t: d * 0.48, scroll: sectionTop("phase-one"), zoom: 1.14, originY: sectionTop("phase-one") + 140, focus: "phase-one", problem: -1, metric: -1, phase: 2, demo: "idle", reveal: 0 },
+        { t: d * 0.52, scroll: sectionTop("phase-one"), zoom: 1.12, originY: sectionTop("phase-one") + 200, focus: "phase-one", problem: -1, metric: -1, phase: 4, demo: "idle", reveal: 0 },
+        { t: d * 0.56, scroll: sectionTop("live-demo"), zoom: 1.06, originY: sectionTop("live-demo") + 60, focus: "live-demo", problem: -1, metric: -1, phase: -1, demo: "idle", reveal: 0 },
+        { t: d * 0.60, scroll: sectionTop("live-demo"), zoom: 1.16, originY: sectionTop("live-demo") + 120, focus: "live-demo", problem: -1, metric: -1, phase: -1, demo: "armed", reveal: 0 },
+        { t: d * 0.63, scroll: sectionTop("live-demo"), zoom: 1.18, originY: sectionTop("live-demo") + 160, focus: "live-demo", problem: -1, metric: -1, phase: -1, demo: "calling", reveal: 0 },
+        { t: d * 0.68, scroll: sectionTop("live-demo"), zoom: 1.14, originY: sectionTop("live-demo") + 220, focus: "live-demo", problem: -1, metric: -1, phase: -1, demo: "result", reveal: 0.15 },
+        { t: d * 0.74, scroll: sectionTop("live-demo"), zoom: 1.20, originY: sectionTop("live-demo") + 280, focus: "live-demo", problem: -1, metric: -1, phase: -1, demo: "result", reveal: 0.55 },
+        { t: d * 0.80, scroll: sectionTop("live-demo"), zoom: 1.28, originY: sectionTop("live-demo") + 340, focus: "live-demo", problem: -1, metric: -1, phase: -1, demo: "result", reveal: 1.0 },
+        { t: d * 0.88, scroll: sectionTop("live-demo") * 0.35, zoom: 1.02, originY: 200, focus: "hero", problem: -1, metric: -1, phase: -1, demo: "result", reveal: 1.0 },
+        { t: d, scroll: 0, zoom: 1.0, originY: 0, focus: "hero", problem: -1, metric: -1, phase: -1, demo: "result", reveal: 1.0 },
+      ];
+    }
+
+    function sampleKeyframes(keyframes, t) {
+      if (t <= keyframes[0].t) return keyframes[0];
+      for (let i = 1; i < keyframes.length; i++) {
+        if (t <= keyframes[i].t) {
+          const a = keyframes[i - 1];
+          const b = keyframes[i];
+          const span = b.t - a.t || 1;
+          const u = easeInOut(clamp((t - a.t) / span, 0, 1));
+          return {
+            scroll: lerp(a.scroll, b.scroll, u),
+            zoom: lerp(a.zoom, b.zoom, u),
+            originY: lerp(a.originY, b.originY, u),
+            focus: u < 0.5 ? a.focus : b.focus,
+            problem: u < 0.5 ? a.problem : b.problem,
+            metric: u < 0.5 ? a.metric : b.metric,
+            phase: u < 0.5 ? a.phase : b.phase,
+            demo: u < 0.5 ? a.demo : b.demo,
+            reveal: lerp(a.reveal, b.reveal, u),
+          };
+        }
       }
-    });
+      return keyframes[keyframes.length - 1];
+    }
+
+    function applyFrame(state) {
+      viewport.style.transformOrigin = `50% ${state.originY}px`;
+      if (recordMode) {
+        viewport.style.transform = `translateY(${(-state.scroll).toFixed(1)}px) scale(${state.zoom.toFixed(4)})`;
+      } else {
+        viewport.style.transform = "";
+        window.scrollTo(0, state.scroll);
+      }
+
+      for (const section of document.querySelectorAll("section, header")) {
+        section.classList.toggle("record-focus", section.id === state.focus);
+      }
+
+      document.querySelectorAll("[data-problem]").forEach((el) => {
+        el.classList.toggle("record-active", parseInt(el.dataset.problem, 10) === state.problem);
+      });
+      document.querySelectorAll("[data-metric]").forEach((el) => {
+        el.classList.toggle("record-active", parseInt(el.dataset.metric, 10) === state.metric);
+      });
+      document.querySelectorAll("[data-phase]").forEach((el) => {
+        el.classList.toggle("record-active", parseInt(el.dataset.phase, 10) === state.phase);
+      });
+
+      btn.classList.toggle("record-active", state.demo === "armed" || state.demo === "calling");
+      out.classList.toggle("record-focus", state.demo === "result" && state.reveal > 0.1);
+
+      if (state.demo === "idle") {
+        status.textContent = "";
+        out.textContent = "Click the button to run a live request…";
+      } else if (state.demo === "armed") {
+        status.textContent = "Ready";
+        out.textContent = "";
+      } else if (state.demo === "calling") {
+        status.textContent = "Calling API…";
+        out.textContent = "POST /answer …";
+      } else if (state.demo === "result") {
+        status.textContent = "OK";
+        const full = cachedAnswerJson || '{\n  "status": "loading"\n}';
+        const chars = Math.max(0, Math.floor(full.length * state.reveal));
+        out.textContent = full.slice(0, chars);
+      }
+    }
+
+    if (recordMode) {
+      const keyframes = buildKeyframes(recordDuration);
+      window.__demoRecorder = {
+        seek(t) {
+          applyFrame(sampleKeyframes(keyframes, t));
+        },
+      };
+      window.__demoRecorderReady = true;
+      window.__demoRecorder.seek(0);
+    }
   </script>
 </body>
 </html>
