@@ -1,0 +1,20 @@
+{"query_id": "fact-001", "bucket": "local_factual", "query": "What port does the billing service expose?", "expected_mode": "CHUNKS"}
+{"query_id": "fact-002", "bucket": "local_factual", "query": "What is the default API timeout for internal services?", "expected_mode": "CHUNKS"}
+{"query_id": "fact-003", "bucket": "local_factual", "query": "Where is the onboarding guide stored?", "expected_mode": "CHUNKS"}
+{"query_id": "rel-001", "bucket": "relationship-heavy", "query": "How is billing connected to the data warehouse?", "expected_mode": "TRIPLET_COMPLETION"}
+{"query_id": "rel-002", "bucket": "relationship-heavy", "query": "How are service A and service B related?", "expected_mode": "TRIPLET_COMPLETION"}
+{"query_id": "rel-003", "bucket": "relationship-heavy", "query": "What services depend on the auth gateway?", "expected_mode": "TRIPLET_COMPLETION"}
+{"query_id": "multi-001", "bucket": "multi-hop", "query": "Which downstream systems are affected if the warehouse ingest fails?", "expected_mode": "GRAPH_COMPLETION"}
+{"query_id": "multi-002", "bucket": "multi-hop", "query": "Trace the dependency chain from the web app to persistent storage.", "expected_mode": "GRAPH_COMPLETION"}
+{"query_id": "summary-001", "bucket": "broad_summary", "query": "Summarize the themes in our platform architecture.", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}
+{"query_id": "summary-002", "bucket": "broad_summary", "query": "Give an overview of how data flows through the system.", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}
+{"query_id": "struct-001", "bucket": "structural_graph", "query": "Run a graph query to list all nodes with more than three edges.", "expected_mode": "CYPHER"}
+{"query_id": "struct-002", "bucket": "structural_graph", "query": "Match all services connected to the billing node.", "expected_mode": "CYPHER"}
+{"query_id": "temp-001", "bucket": "time_sensitive", "query": "What is the latest status of the rollout?", "freshness_required": true, "expected_mode": "TEMPORAL"}
+{"query_id": "temp-002", "bucket": "time_sensitive", "query": "What changed in billing configuration this week?", "freshness_required": true, "expected_mode": "TEMPORAL"}
+{"query_id": "temp-003", "bucket": "time_sensitive", "query": "Show current incident updates for production.", "expected_mode": "TEMPORAL"}
+{"query_id": "ambig-001", "bucket": "ambiguous", "query": "Tell me about the system.", "expected_mode": "CHUNKS"}
+{"query_id": "ambig-002", "bucket": "ambiguous", "query": "What's going on with data?", "expected_mode": "CHUNKS"}
+{"query_id": "rel-004", "bucket": "relationship-heavy", "query": "How does the ingestion pipeline relate to analytics dashboards?", "expected_mode": "TRIPLET_COMPLETION"}
+{"query_id": "fact-004", "bucket": "local_factual", "query": "What environment variable controls cache TTL?", "expected_mode": "CHUNKS"}
+{"query_id": "summary-003", "bucket": "broad_summary", "query": "How are the major subsystems organized?", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}

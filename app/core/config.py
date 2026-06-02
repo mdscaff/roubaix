@@ -3,22 +3,35 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_env: str = Field(default="development", alias="APP_ENV")
     app_log_level: str = Field(default="INFO", alias="APP_LOG_LEVEL")
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
 
+    # LLM providers (Roubaix synthesis; bridged to Cognee in cognee_setup.py)
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+
+    # Cognee Cloud HTTP API — not used for local SDK + pgGraph
     cognee_api_key: str | None = Field(default=None, alias="COGNEE_API_KEY")
     cognee_base_url: str | None = Field(default=None, alias="COGNEE_BASE_URL")
 
-    default_model: str = Field(default="gpt-5", alias="DEFAULT_MODEL")
-    default_embedding_model: str = Field(
-        default="text-embedding-3-large", alias="DEFAULT_EMBEDDING_MODEL"
+    default_model: str = Field(default="openai/gpt-4o-mini", alias="DEFAULT_MODEL")
+    default_llm_endpoint: str | None = Field(
+        default="https://openrouter.ai/api/v1",
+        alias="DEFAULT_LLM_ENDPOINT",
     )
+    default_embedding_model: str = Field(
+        default="text-embedding-3-small",
+        alias="DEFAULT_EMBEDDING_MODEL",
+    )
+    default_embedding_dimensions: int = Field(default=1536, alias="DEFAULT_EMBEDDING_DIMENSIONS")
+
+    cognee_setup_enabled: bool = Field(default=True, alias="ROUBAIX_COGNEE_SETUP")
+    graph_database_provider: str | None = Field(default=None, alias="GRAPH_DATABASE_PROVIDER")
 
     default_dataset: str = Field(default="default", alias="ROUBAIX_DEFAULT_DATASET")
     max_evidence_items: int = Field(default=12, alias="ROUBAIX_MAX_EVIDENCE_ITEMS")

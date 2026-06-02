@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.domain.models import QueryRequest, SearchMode
+from app.domain.models import QueryRequest
 from app.integrations.cognee_client import CogneeClient
 from app.services.cache import ContentAddressedCache
 from app.services.evidence import EvidencePacker

@@ -31,7 +31,7 @@ class QualityServiceHandler:
     @nexusrpc.handler.sync_operation
     async def record_outcome(
         self,
-        ctx: nexusrpc.handler.SyncOperationContext,
+        ctx: nexusrpc.handler.StartOperationContext,
         input: OutcomeRecord,
     ) -> None:
         # Phase 2: update windowed outcome tracker
@@ -40,7 +40,7 @@ class QualityServiceHandler:
     @nexusrpc.handler.sync_operation
     async def get_route_stats(
         self,
-        ctx: nexusrpc.handler.SyncOperationContext,
+        ctx: nexusrpc.handler.StartOperationContext,
         input: SearchMode,
     ) -> RouteStats:
         # Phase 2: return windowed stats for the given mode

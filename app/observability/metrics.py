@@ -1,7 +1,6 @@
 from collections import Counter
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Iterator
 
 
 @dataclass
