@@ -2,6 +2,60 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.5.0] — 2026-08-15
+
+Phases A, B, and C1 of the research-backed implementation plan, built the same
+day the plan landed. Every mechanism here traces to a claim that survived
+3-vote adversarial verification; the plan records what did not.
+
+### Added
+
+- **Set-level sufficiency gate** (`app/services/sufficiency.py`), wired into
+  the runtime controller between the latency ceiling and the volume floor.
+  Sufficiency is judged over the packed evidence *set* — a per-item scorer
+  cannot observe a missing bridge item — using stemmed query-term coverage,
+  supporting-item ratio, and provenance diversity. Twelve on-budget items
+  about the wrong entity now escalate or refuse instead of passing every
+  count check. Tier 1 (optional `verify` extra) refines the uncertain band
+  with a MiniCheck 770M adapter; its threshold is documented as an empirical
+  dial because the model's [0,1] output is not demonstrably calibrated. The
+  plan's acceptance gates are encoded as losable tests: ≥80% of mismatched
+  evidence flagged (currently 100%), ≤10% false-INSUFFICIENT on matched
+  evidence (currently 0%).
+- **Evidentiality-ordered packing.** The token budget now cuts the least
+  evidential items instead of the last-retrieved ones, with retrieval rank as
+  the tie-break and one flag back to rank order.
+  `best_dropped_evidentiality` telemetry is the observable for a budget that
+  is cutting things the gate wanted.
+- **NodeSet scope derivation by entity anchoring** (`app/services/scoping.py`):
+  a lexical alias index (`ROUBAIX_NODESET_INDEX_PATH`) derives scope when the
+  caller sent none; a caller-supplied scope is never widened or second-guessed.
+  Matching is stemmed token-exact — the "port"-in-"support" substring bug
+  class, now avoided in three places. The Cognee call sets
+  `node_name_filter_operator="OR"` explicitly. POLICY_VERSION → 3.
+- New `StopReason.EVIDENCE_CONFLICT`, reserved: the controller handles the
+  REFUTED verdict, and the module states plainly that no current tier can
+  emit it.
+
+### Changed
+
+- Controller and cache test fixtures are query-relevant now, because the
+  controller checks what evidence is *about*, not just how much there is.
+- The DSPy learned stage reuses the baseline's derived scope — it changes the
+  mode, not the scope.
+
+### Fixed
+
+- Alias matching credited a nondeterministic alias (set iteration order); a
+  flaky test caught it. Deterministic now, with a determinism test —
+  unreplayable telemetry is not telemetry.
+
+### Not yet run
+
+- The scoping-precision acceptance gate (needs a scoping-labelled corpus
+  extension), Tier-2 autorater (deliberately unbuilt), Phase D decomposition
+  and C2 learned scorer (need live Cognee).
+
 ## [0.4.0] — 2026-08-15
 
 A correctness and honesty pass over the whole pipeline, following a full audit

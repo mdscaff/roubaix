@@ -45,7 +45,14 @@ Worth stating first, because it means three existing design decisions should
 
 ---
 
-## Phase A — Set-level sufficiency gate in the runtime controller
+## Phase A — Set-level sufficiency gate in the runtime controller — **DELIVERED (Tiers 0–1)**
+
+Shipped in `app/services/sufficiency.py` + controller wiring. Delivered scope:
+Tier 0 (stemmed set-level lexical signals, always on) and Tier 1 (pluggable
+scorer with a MiniCheck adapter behind the `verify` extra, refining only the
+UNCERTAIN band, failure-latching). Tier 2 remains unbuilt, as decided below.
+Both acceptance gates are encoded as losable tests against the held-out
+queries and currently pass at 100% flagged / 0% false-INSUFFICIENT.
 
 **The highest-value item.** The controller currently gates on evidence count
 and token volume; one irrelevant chunk passes. The literature converged on two
@@ -116,7 +123,12 @@ unmeasured, which is exactly what the acceptance gates check.
 
 ---
 
-## Phase B — Evidentiality-aware packing with a reflection-widen loop
+## Phase B — Evidentiality-aware packing with a reflection-widen loop — **DELIVERED**
+
+Shipped: the packer orders deduplicated items by stemmed query-term overlap
+(the same matching as the gate, so packing and gating agree) before the
+budgets bite; `best_dropped_evidentiality` is the budget-pressure observable;
+`ROUBAIX_EVIDENTIALITY_ORDERING=false` restores rank order.
 
 ECoRAG (ACL 2025 Findings, arXiv:2506.05167) validated the pattern Roubaix's
 controller already half-implements: compress evidence to what is *evidential*
@@ -160,7 +172,11 @@ outperforming GNN/LLM/heuristic retrievers (WebQSP triple recall ~0.883 vs RoG
 
 Staged to match what Roubaix actually has:
 
-1. **C1 — lexical entity anchoring (now).** Maintain a NodeSet name/alias index
+1. **C1 — lexical entity anchoring — DELIVERED** (`app/services/scoping.py`:
+   alias index from `ROUBAIX_NODESET_INDEX_PATH`, stemmed token-exact matching,
+   caller scope always wins, `node_name_filter_operator="OR"` set explicitly,
+   POLICY_VERSION bumped). The scoping-precision acceptance gate below still
+   needs a scoping-labelled corpus extension — not yet run. Original notes: Maintain a NodeSet name/alias index
    from Cognee dataset metadata; match query keywords against it (the earlier
    research pass already found lexical beats dense embeddings for exactly this
    kind of scoping); emit matched NodeSets on `RouteDecision.node_sets` with a
