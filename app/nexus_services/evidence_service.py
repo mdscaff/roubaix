@@ -6,7 +6,6 @@ can fan out parallel retrievals via the RouterWorkflow.
 
 from __future__ import annotations
 
-
 import nexusrpc
 import nexusrpc.handler
 from temporalio import nexus

@@ -1,10 +1,10 @@
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class SearchMode(str, Enum):
+class SearchMode(StrEnum):
     CHUNKS = "CHUNKS"
     RAG_COMPLETION = "RAG_COMPLETION"
     TRIPLET_COMPLETION = "TRIPLET_COMPLETION"

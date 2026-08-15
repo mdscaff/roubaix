@@ -38,7 +38,9 @@ class FakeCogneeClient(CogneeClient):
             mode=mode,
             evidence=RetrievalEvidence(
                 chunks=[f"chunk {i} for {dataset}" for i in range(4)],
-                triplets=[{"subject": "A", "predicate": "rel", "object": f"B{i}"} for i in range(4)],
+                triplets=[
+                    {"subject": "A", "predicate": "rel", "object": f"B{i}"} for i in range(4)
+                ],
                 graph_paths=[{"path": ["A", "B", f"C{i}"]} for i in range(4)],
                 rows=[{"k": f"v{i}"} for i in range(4)],
                 timestamps=[f"2026-0{i + 1}-01" for i in range(4)],

@@ -1,7 +1,8 @@
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator
 
+import anyio.to_thread
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
@@ -65,7 +66,8 @@ async def healthz() -> dict[str, object]:
 async def demo() -> FileResponse:
     """CEO-friendly browser demo (problems, outcomes, live POST /answer)."""
     path = _STATIC / "demo.html"
-    if not path.is_file():
+    # Path.is_file() is a blocking syscall; run it off the event loop.
+    if not await anyio.to_thread.run_sync(path.is_file):
         raise HTTPException(status_code=404, detail=f"Missing demo page: {path}")
     return FileResponse(path, media_type="text/html")
 
@@ -80,7 +82,7 @@ async def answer(request: QueryRequest) -> AnswerResult:
     """
     try:
         return await orchestrator.answer(request)
-    except Exception as exc:  # noqa: BLE001 - boundary handler
+    except Exception as exc:
         # Never leak an internal traceback to the caller, and never let one
         # surface as an unhandled 500 with no log line.
         raise HTTPException(

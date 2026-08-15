@@ -1,5 +1,10 @@
 from app.domain.models import PackedEvidence, QueryRequest, RouteDecision, SearchMode
-from app.services.runtime_controller import ControlAction, RuntimeController
+from app.services.runtime_controller import (
+    CheckErrorPolicy,
+    ControlAction,
+    RuntimeController,
+    StopReason,
+)
 
 
 def _packed(
@@ -169,3 +174,73 @@ def test_accepts_freshness_when_evidence_is_dated() -> None:
         QueryRequest(query="q", freshness_required=True), route, packed, retry_count=0
     )
     assert decision.action is ControlAction.ACCEPT
+
+
+def test_freshness_contract_survives_escalation_away_from_temporal() -> None:
+    """Regression: escalating past TEMPORAL silently dropped the contract.
+
+    Once the ladder moves to a broader non-temporal mode, the evidence is no
+    longer dated — but `requires_freshness_validation` is still set, and the
+    answer would have been returned as if the freshness requirement were met.
+    """
+    route = RouteDecision(
+        mode=SearchMode.GRAPH_SUMMARY_COMPLETION,
+        rationale="escalated from TEMPORAL",
+        requires_freshness_validation=True,
+        evidence_budget=10,
+    )
+    packed = _packed(SearchMode.GRAPH_SUMMARY_COMPLETION, items=["a broad undated summary"] * 1)
+    packed.token_estimate = 500  # substantial, so not thin
+    decision = RuntimeController(allow_stub_evidence=True, strict_freshness=True).decide(
+        QueryRequest(query="what is the latest status", freshness_required=True),
+        route,
+        packed,
+        retry_count=1,
+        attempted_modes=frozenset({SearchMode.TEMPORAL, SearchMode.GRAPH_SUMMARY_COMPLETION}),
+    )
+    assert decision.action is ControlAction.FAIL_CLOSED
+    assert decision.stop_reason is StopReason.FRESHNESS_UNVERIFIABLE
+
+
+def test_latency_ceiling_is_a_stop_reason_not_an_error() -> None:
+    """A caller ceiling is an expected outcome, so it lives in the same enum."""
+    route = RouteDecision(mode=SearchMode.CHUNKS, rationale="test", evidence_budget=8)
+    decision = _controller().decide(
+        QueryRequest(query="q", max_latency_ms=100),
+        route,
+        _packed(items=["a", "b", "c"]),
+        retry_count=0,
+        elapsed_ms=250,
+    )
+    assert decision.stop_reason is StopReason.LIMIT_LATENCY
+    assert decision.action is ControlAction.ACCEPT  # usable evidence is still returned
+
+
+def test_latency_ceiling_with_no_evidence_fails_closed() -> None:
+    route = RouteDecision(mode=SearchMode.CHUNKS, rationale="test")
+    decision = _controller().decide(
+        QueryRequest(query="q", max_latency_ms=100), route, _packed(), retry_count=0, elapsed_ms=250
+    )
+    assert decision.action is ControlAction.FAIL_CLOSED
+    assert decision.stop_reason is StopReason.LIMIT_LATENCY
+
+
+def test_a_raising_check_fails_closed_by_default() -> None:
+    """A control check that cannot run has not passed."""
+    controller = RuntimeController(allow_stub_evidence=True)
+    broken = RouteDecision(mode=SearchMode.CHUNKS, rationale="test")
+    object.__setattr__(broken, "evidence_budget", "not-a-number")  # forces a TypeError
+    decision = controller.decide(QueryRequest(query="q"), broken, _packed(), retry_count=0)
+    assert decision.action is ControlAction.FAIL_CLOSED
+    assert decision.stop_reason is StopReason.CHECK_ERROR
+
+
+def test_fail_open_policy_is_available_but_must_be_asked_for() -> None:
+    controller = RuntimeController(
+        allow_stub_evidence=True, on_check_error=CheckErrorPolicy.PROCEED
+    )
+    broken = RouteDecision(mode=SearchMode.CHUNKS, rationale="test")
+    object.__setattr__(broken, "evidence_budget", "not-a-number")
+    decision = controller.decide(QueryRequest(query="q"), broken, _packed(), retry_count=0)
+    assert decision.action is ControlAction.ACCEPT
+    assert "fail_open" in decision.signals

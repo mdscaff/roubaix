@@ -48,7 +48,7 @@ def estimate_tokens(text: str) -> int:
         import tiktoken  # type: ignore[import-not-found]
 
         return len(tiktoken.get_encoding("cl100k_base").encode(text))
-    except Exception:
+    except Exception:  # noqa: BLE001 - optional dep; fall back to the heuristic
         return max(1, len(text) // _CHARS_PER_TOKEN)
 
 
@@ -83,7 +83,9 @@ def price_for(model: str) -> tuple[float, float] | None:
     return suffix_matches[0] if len(suffix_matches) == 1 else None
 
 
-def max_input_tokens_for_budget(model: str, usd_budget: float, *, reserved_output_tokens: int = 400) -> int | None:
+def max_input_tokens_for_budget(
+    model: str, usd_budget: float, *, reserved_output_tokens: int = 400
+) -> int | None:
     """Largest input token count that keeps one synthesis call under *usd_budget*.
 
     Returns ``None`` when the model is unpriced — an unknown price must not be

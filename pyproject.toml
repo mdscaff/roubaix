@@ -4,46 +4,53 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "roubaix"
-version = "0.2.0"
+version = "0.3.0"
 description = "Cognee-centered graph retrieval experiment with cost-aware routing and DSPy/GEPA optimization"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "fastapi>=0.136.0",
-  "uvicorn>=0.48.0",
-  "pydantic>=2.13.0",
-  "pydantic-settings>=2.14.0",
-  "httpx>=0.28.0",
+  "fastapi>=0.141.0",
+  "uvicorn>=0.52.0",
+  "pydantic>=2.13.4",
+  "pydantic-settings>=2.15.0",
+  "httpx>=0.28.1",
   "structlog>=25.5.0",
-  "tenacity>=9.1.0",
-  "orjson>=3.11.0",
+  "tenacity>=9.1.4",
+  "orjson>=3.12.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=9.0.0",
+  "pytest>=9.1.1",
   "pytest-asyncio>=1.4.0",
-  "ruff>=0.15.0",
-  "mypy>=2.1.0",
+  "ruff>=0.16.3",
+  "mypy>=2.3.1",
 ]
 temporal = [
-  "temporalio>=1.27.0",
+  "temporalio>=1.31.0",
   "nexus-rpc>=1.4.0",
 ]
 opt = [
-  "dspy>=3.2.0",
-  "cognee>=1.1.0",
-  "datasketch>=1.10.0",
+  "dspy>=3.3.0",
+  "cognee>=1.4.2",
+  "datasketch>=2.0.0",
+  # Imported opportunistically by app/core/tokens.py. It was previously only
+  # present transitively via cognee, so token estimates silently changed
+  # accuracy depending on which extras were installed.
+  "tiktoken>=0.13.0",
 ]
 demo = [
-  "playwright>=1.60.0",
-  "edge-tts>=7.2.0",
+  "playwright>=1.62.0",
+  "edge-tts>=7.2.8",
 ]
 eval = [
-  "langfuse>=2.0.0",
+  # v4 is a breaking change: it is OpenTelemetry-based and removed
+  # Langfuse.start_span in favour of start_as_current_observation. The floor is
+  # a hard requirement, not a preference — see app/integrations/langfuse_tracing.py.
+  "langfuse>=4.0.0",
 ]
 pggraph = [
-  "asyncpg>=0.30.0",
+  "asyncpg>=0.31.0",
   "cognee-community-graph-adapter-pggraph @ git+https://github.com/topoteretes/cognee-community.git#subdirectory=packages/graph/pggraph",
 ]
 
@@ -52,6 +59,36 @@ include = ["app*"]
 
 [tool.ruff]
 line-length = 100
+target-version = "py311"
+
+# The rule set is pinned explicitly. Ruff's *default* selection changes between
+# releases, so relying on it means a dependency upgrade silently changes what
+# CI enforces — upgrading to 0.16 surfaced 34 findings in code that had been
+# passing. Adding a rule should be a deliberate commit, not a side effect.
+[tool.ruff.lint]
+select = [
+  "E", "W",     # pycodestyle
+  "F",          # pyflakes
+  "I",          # import sorting
+  "UP",         # pyupgrade
+  "B",          # bugbear
+  "C4",         # comprehensions
+  "SIM",        # simplify
+  "ISC",        # implicit string concat (a missing comma reads as concatenation)
+  "PIE",
+  "LOG", "G",   # logging correctness
+  "ASYNC",      # blocking calls in async paths
+  "BLE",        # blind except
+  "PLE", "PLW", # pylint errors and warnings
+  "RUF",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests deliberately assert on private attributes and use broad fixtures.
+"tests/*" = ["SLF001"]
+# One-shot CLI scripts: a synchronous file read before an await is fine here,
+# and the sys.path bootstrap has to precede the app imports.
+"scripts/*" = ["ASYNC240", "E402"]
 
 [tool.mypy]
 python_version = "3.11"

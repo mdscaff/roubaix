@@ -157,7 +157,9 @@ def test_token_gate_fails_when_reduction_is_insufficient() -> None:
             median_input_tokens=1000.0,
         ),
     ]
-    assert compute_acceptance_gates(stats)["input_tokens_25pct_below_graph_only"] is GateVerdict.FAIL
+    assert (
+        compute_acceptance_gates(stats)["input_tokens_25pct_below_graph_only"] is GateVerdict.FAIL
+    )
 
 
 def test_gates_report_unknown_when_the_comparison_baseline_is_absent() -> None:

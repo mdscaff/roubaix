@@ -48,7 +48,9 @@ def evidence_from_search_results(
         return RetrievalEvidence(chunks=strings, provenance=provenance)
 
     if mode == SearchMode.TRIPLET_COMPLETION:
-        triplets = [{"subject": "context", "predicate": "contains", "object": text} for text in strings]
+        triplets = [
+            {"subject": "context", "predicate": "contains", "object": text} for text in strings
+        ]
         return RetrievalEvidence(triplets=triplets, provenance=provenance)
 
     if mode in {SearchMode.GRAPH_COMPLETION, SearchMode.GRAPH_SUMMARY_COMPLETION}:

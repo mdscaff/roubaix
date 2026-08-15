@@ -43,10 +43,11 @@ class EvidencePacker:
     ) -> PackedEvidence:
         raw = self._extract(result)
 
-        max_items = min(
-            evidence_budget or settings.max_evidence_items,
-            max(settings.max_evidence_items, evidence_budget or 0),
-        )
+        # An explicit budget wins outright: the router (or an eval baseline) has
+        # made a deliberate cost decision, and silently overriding it with the
+        # global cap is what made routing decorative in the first place. The
+        # global cap applies only when no budget was supplied.
+        max_items = evidence_budget if evidence_budget is not None else settings.max_evidence_items
         max_tokens = token_budget or settings.evidence_token_budget
 
         # Deduplicate, preserving retrieval order (rank order carries signal).

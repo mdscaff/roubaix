@@ -50,7 +50,7 @@ def test_substring_lookalikes_do_not_buy_an_expensive_mode(query: str) -> None:
     ],
 )
 def test_negated_signals_do_not_fire(query: str) -> None:
-    """"Not connected to X" is not a relationship lookup."""
+    """ "Not connected to X" is not a relationship lookup."""
     assert _route(query).mode is not SearchMode.TRIPLET_COMPLETION
 
 

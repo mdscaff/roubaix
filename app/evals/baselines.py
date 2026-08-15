@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from app.domain.models import SearchMode
 from app.integrations.cognee_client import CogneeClient
@@ -14,7 +14,7 @@ from app.services.router import ForcedModeRouter, QueryRouter
 from app.services.runtime_controller import RuntimeController
 
 
-class Baseline(str, Enum):
+class Baseline(StrEnum):
     CHUNKS_ONLY = "chunks_only"
     GRAPH_ONLY = "graph_only"
     ROUBAIX_RULES = "roubaix_rules"

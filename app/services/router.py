@@ -59,7 +59,7 @@ class Signal:
     weight: float
 
     @classmethod
-    def of(cls, name: str, pattern: str, weight: float = 1.0) -> "Signal":
+    def of(cls, name: str, pattern: str, weight: float = 1.0) -> Signal:
         return cls(name=name, pattern=re.compile(pattern), weight=weight)
 
     def fires(self, text: str) -> bool:
@@ -93,8 +93,12 @@ RULES: tuple[ModeRule, ...] = (
         requires_freshness_validation=True,
         signals=(
             Signal.of("temporal.deictic", r"\b(today|yesterday|now|currently|current)\b", 2.0),
-            Signal.of("temporal.recency", r"\b(latest|newest|recent|recently|up[- ]to[- ]date)\b", 2.0),
-            Signal.of("temporal.window", r"\b(this|last|past)\s+(week|month|quarter|year|day)\b", 2.0),
+            Signal.of(
+                "temporal.recency", r"\b(latest|newest|recent|recently|up[- ]to[- ]date)\b", 2.0
+            ),
+            Signal.of(
+                "temporal.window", r"\b(this|last|past)\s+(week|month|quarter|year|day)\b", 2.0
+            ),
             Signal.of("temporal.change", r"\b(changed|change[ds]?|updated|as of|since)\b", 1.0),
             Signal.of("temporal.status", r"\b(status|incident|outage|rollout)\b", 0.5),
         ),
@@ -106,8 +110,14 @@ RULES: tuple[ModeRule, ...] = (
         signals=(
             Signal.of("structural.explicit", r"\b(cypher|graph query|query the graph)\b", 3.0),
             Signal.of("structural.match", r"\bmatch (all|every|any|nodes?|the)\b", 3.0),
-            Signal.of("structural.topology", r"\b(edges?|degree|subgraph|traversals?|adjacen\w+)\b", 2.0),
-            Signal.of("structural.count", r"\b(how many|count|list all)\b.*\b(nodes?|edges?|services?)\b", 1.5),
+            Signal.of(
+                "structural.topology", r"\b(edges?|degree|subgraph|traversals?|adjacen\w+)\b", 2.0
+            ),
+            Signal.of(
+                "structural.count",
+                r"\b(how many|count|list all)\b.*\b(nodes?|edges?|services?)\b",
+                1.5,
+            ),
         ),
     ),
     ModeRule(
@@ -115,10 +125,20 @@ RULES: tuple[ModeRule, ...] = (
         evidence_budget=10,
         rationale="multi-hop / impact query",
         signals=(
-            Signal.of("multihop.direction", r"\b(downstream|upstream|transitive\w*|end[- ]to[- ]end)\b", 3.0),
-            Signal.of("multihop.impact", r"\b(affect\w*|impact\w*|blast radius|what breaks|knock[- ]on)\b", 2.0),
+            Signal.of(
+                "multihop.direction",
+                r"\b(downstream|upstream|transitive\w*|end[- ]to[- ]end)\b",
+                3.0,
+            ),
+            Signal.of(
+                "multihop.impact",
+                r"\b(affect\w*|impact\w*|blast radius|what breaks|knock[- ]on)\b",
+                2.0,
+            ),
             Signal.of("multihop.chain", r"\b(chain|path|trace|propagat\w+)\b", 2.0),
-            Signal.of("multihop.conditional", r"\bif\b.*\b(fail\w*|down|breaks?|unavailable)\b", 2.0),
+            Signal.of(
+                "multihop.conditional", r"\bif\b.*\b(fail\w*|down|breaks?|unavailable)\b", 2.0
+            ),
         ),
     ),
     ModeRule(
@@ -127,7 +147,11 @@ RULES: tuple[ModeRule, ...] = (
         rationale="relationship-heavy query",
         signals=(
             Signal.of("relation.noun", r"\b(relationship|association|linkage)\b", 3.0),
-            Signal.of("relation.verb", r"\b(relate[sd]?|connect(s|ed|ion)?|link(s|ed)?|depend(s|ent)? on)\b", 2.0),
+            Signal.of(
+                "relation.verb",
+                r"\b(relate[sd]?|connect(s|ed|ion)?|link(s|ed)?|depend(s|ent)? on)\b",
+                2.0,
+            ),
             Signal.of("relation.between", r"\bbetween\b.*\band\b", 1.5),
             Signal.of("relation.owner", r"\b(owns?|owned by|belongs to|reports to)\b", 1.5),
         ),
@@ -141,7 +165,9 @@ RULES: tuple[ModeRule, ...] = (
             Signal.of("summary.themes", r"\b(themes?|landscape|big picture|high[- ]level)\b", 2.5),
             Signal.of(
                 "summary.organisation",
-                r"\bhow (are|is|do|does)\b.*\b(organi[sz]ed|structured|arranged|grouped|laid out)\b",
+                # Kept on one line: splitting a regex across implicit string
+                # concatenation is how stray whitespace gets into a pattern.
+                r"\bhow (are|is|do|does)\b.*\b(organi[sz]ed|structured|arranged|grouped|laid out)\b",  # noqa: E501
                 3.0,
             ),
             Signal.of("summary.explain", r"\bexplain how\b|\bwalk me through\b", 2.0),
@@ -211,9 +237,7 @@ class QueryRouter:
             # Nothing cleared the bar. The cheap default is the right answer,
             # but it is a fallback rather than a classification, so it is not
             # reported as confident.
-            return self._decision(
-                DEFAULT_RULE, request, signals=[], scores=scores, confident=False
-            )
+            return self._decision(DEFAULT_RULE, request, signals=[], scores=scores, confident=False)
         return self._decision(
             self._rule_for(winner),
             request,
@@ -235,7 +259,7 @@ class QueryRouter:
         others = [s for mode, s in scores.items() if mode != winner.value]
         if not others:
             return True
-        return scores[winner.value] >= CONFIDENCE_MARGIN * max(max(others), 1.0)
+        return scores[winner.value] >= CONFIDENCE_MARGIN * max(*others, 1.0)
 
     def _rule_for(self, mode: SearchMode) -> ModeRule:
         for rule in self.rules:

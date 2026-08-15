@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
@@ -19,7 +19,7 @@ class EvalQuery(BaseModel):
     notes: str | None = None
 
 
-class GateVerdict(str, Enum):
+class GateVerdict(StrEnum):
     """A gate that was not measured must never read as a pass.
 
     UNKNOWN is a distinct outcome from FAIL: it means the run could not

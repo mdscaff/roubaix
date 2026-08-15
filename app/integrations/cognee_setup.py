@@ -55,7 +55,9 @@ def build_cognee_env_overrides() -> dict[str, str]:
     if llm_api_key and not os.getenv("LLM_API_KEY"):
         overrides["LLM_API_KEY"] = llm_api_key
 
-    if (os.getenv("OPENROUTER_API_KEY") or settings.openrouter_api_key) and not os.getenv("LLM_ENDPOINT"):
+    if (os.getenv("OPENROUTER_API_KEY") or settings.openrouter_api_key) and not os.getenv(
+        "LLM_ENDPOINT"
+    ):
         endpoint = settings.default_llm_endpoint or "https://openrouter.ai/api/v1"
         overrides["LLM_ENDPOINT"] = endpoint
 
@@ -104,7 +106,9 @@ def register_pggraph_adapter() -> bool:
     if provider != "pggraph":
         return False
     try:
-        from cognee_community_graph_adapter_pggraph import register  # type: ignore[import-not-found]
+        from cognee_community_graph_adapter_pggraph import (
+            register,  # type: ignore[import-not-found]
+        )
     except ImportError:
         logger.warning(
             "GRAPH_DATABASE_PROVIDER=pggraph but cognee-community-graph-adapter-pggraph "
@@ -126,7 +130,7 @@ def _try_import_cognee() -> Any | None:
 
 def configure_cognee() -> dict[str, Any]:
     """Apply env bridges and runtime Cognee config. Idempotent per process."""
-    global _COGNEE_STATUS
+    global _COGNEE_STATUS  # noqa: PLW0603
 
     if not settings.cognee_setup_enabled:
         _COGNEE_STATUS = {"configured": False, "reason": "disabled"}

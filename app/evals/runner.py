@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Iterable
 
 from app.domain.models import AnswerResult, QueryRequest
 from app.evals.baselines import Baseline, create_orchestrator
@@ -21,8 +21,8 @@ from app.observability.eval_trace import EvalRunContext, EvalTrace, eval_run_con
 
 def load_corpus(path: Path) -> list[EvalQuery]:
     queries: list[EvalQuery] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
         if not line or line.startswith("#"):
             continue
         queries.append(EvalQuery.model_validate_json(line))

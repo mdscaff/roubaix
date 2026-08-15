@@ -46,7 +46,7 @@ def _percentile(values: list[float], pct: float) -> float:
     if not values:
         return 0.0
     ordered = sorted(values)
-    index = max(0, min(len(ordered) - 1, int(round((pct / 100) * (len(ordered) - 1)))))
+    index = max(0, min(len(ordered) - 1, round((pct / 100) * (len(ordered) - 1))))
     return ordered[index]
 
 
@@ -81,9 +81,9 @@ def summarize_baseline(traces: list[EvalTrace]) -> list[BaselineStats]:
         routing_accuracy = None
         by_bucket: dict[str, float] = {}
         if labeled:
-            routing_accuracy = sum(
-                1 for t in labeled if t.route_mode == t.expected_mode
-            ) / len(labeled)
+            routing_accuracy = sum(1 for t in labeled if t.route_mode == t.expected_mode) / len(
+                labeled
+            )
             per_bucket: dict[str, list[bool]] = defaultdict(list)
             for t in labeled:
                 per_bucket[t.bucket].append(t.route_mode == t.expected_mode)
@@ -106,7 +106,9 @@ def summarize_baseline(traces: list[EvalTrace]) -> list[BaselineStats]:
                 total_output_tokens=int(sum(t.output_tokens or 0 for t in rows)),
                 total_estimated_cost_usd=total_cost,
                 cost_per_accepted_answer_usd=(
-                    total_cost / accepted_count if total_cost is not None and accepted_count else None
+                    total_cost / accepted_count
+                    if total_cost is not None and accepted_count
+                    else None
                 ),
                 escalation_rate=sum(1 for t in rows if t.retry_count > 0) / n,
                 fail_closed_rate=sum(1 for t in rows if not t.accepted) / n,
@@ -177,9 +179,7 @@ def compute_acceptance_gates(stats: list[BaselineStats]) -> dict[str, GateVerdic
     # on every query.
     if rules and graph and graph.median_input_tokens > 0:
         reduction = 1.0 - (rules.median_input_tokens / graph.median_input_tokens)
-        gates["input_tokens_25pct_below_graph_only"] = verdict(
-            reduction >= TOKEN_REDUCTION_TARGET
-        )
+        gates["input_tokens_25pct_below_graph_only"] = verdict(reduction >= TOKEN_REDUCTION_TARGET)
     else:
         gates["input_tokens_25pct_below_graph_only"] = GateVerdict.UNKNOWN
 
@@ -187,7 +187,9 @@ def compute_acceptance_gates(stats: list[BaselineStats]) -> dict[str, GateVerdic
     # answer-correctness signal, acceptance rate is the weakest possible proxy
     # — so this gate is necessary but nowhere near sufficient.
     gates["acceptance_not_worse_than_graph_only"] = (
-        verdict(rules.accepted_rate >= graph.accepted_rate) if rules and graph else GateVerdict.UNKNOWN
+        verdict(rules.accepted_rate >= graph.accepted_rate)
+        if rules and graph
+        else GateVerdict.UNKNOWN
     )
 
     # A router that cannot beat the best single fixed mode has not earned its
@@ -241,7 +243,10 @@ def generate_report(run_dir: Path) -> str:
         [
             "## Baseline summary",
             "",
-            "| Baseline | Queries | Accepted | Median ms | p95 ms | Median in-tok | Cost/accepted | Escalated | Routing acc |",
+            (
+                "| Baseline | Queries | Accepted | Median ms | p95 ms |"
+                " Median in-tok | Cost/accepted | Escalated | Routing acc |"
+            ),
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
@@ -264,9 +269,7 @@ def generate_report(run_dir: Path) -> str:
         if item.routing_accuracy is None:
             continue
         best_fixed = (
-            "—"
-            if item.best_fixed_mode_accuracy is None
-            else f"{item.best_fixed_mode_accuracy:.0%}"
+            "—" if item.best_fixed_mode_accuracy is None else f"{item.best_fixed_mode_accuracy:.0%}"
         )
         lines.append(
             f"- **{item.baseline}**: {item.routing_accuracy:.0%} accuracy "
@@ -303,13 +306,20 @@ def generate_report(run_dir: Path) -> str:
             "## Notes",
             "",
             "- `results.jsonl` is the source of truth for this run.",
-            "- `UNKNOWN` means the run could not establish the claim either way. "
-            "It is not a pass.",
-            "- Routing accuracy is meaningful only against a corpus the router was "
-            "not tuned on. Use `evals/queries_heldout.jsonl` for that number and "
-            "label which corpus produced it.",
-            "- A 25% token reduction is roughly what any competent router achieves; "
-            "clearing that gate shows the router is not broken, not that it is good.",
+            (
+                "- `UNKNOWN` means the run could not establish the claim either "
+                "way. It is not a pass."
+            ),
+            (
+                "- Routing accuracy is meaningful only against a corpus the router "
+                "was not tuned on. Use `evals/queries_heldout.jsonl` for that "
+                "number and label which corpus produced it."
+            ),
+            (
+                "- A 25% token reduction is roughly what any competent router "
+                "achieves; clearing that gate shows the router is not broken, not "
+                "that it is good."
+            ),
             "",
         ]
     )

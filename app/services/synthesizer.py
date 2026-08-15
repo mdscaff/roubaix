@@ -55,7 +55,9 @@ class AnswerSynthesizer:
     ) -> None:
         self.api_key = api_key or resolve_llm_api_key()
         self.model = model or settings.default_model
-        self.endpoint = (endpoint or settings.default_llm_endpoint or "https://openrouter.ai/api/v1").rstrip("/")
+        self.endpoint = (
+            endpoint or settings.default_llm_endpoint or "https://openrouter.ai/api/v1"
+        ).rstrip("/")
         self.timeout_s = timeout_s if timeout_s is not None else settings.synthesis_timeout_s
         self._http: httpx.AsyncClient | None = None
 
@@ -161,7 +163,9 @@ class AnswerSynthesizer:
         return "No completion returned by the LLM provider."
 
     @staticmethod
-    def _fallback_answer(request: QueryRequest, route: RouteDecision, packed: PackedEvidence) -> str:
+    def _fallback_answer(
+        request: QueryRequest, route: RouteDecision, packed: PackedEvidence
+    ) -> str:
         return (
             f"Roubaix response using mode={route.mode.value}. "
             f"Query: {request.query}. "
@@ -169,6 +173,8 @@ class AnswerSynthesizer:
         )
 
     @staticmethod
-    def _estimate_tokens(request: QueryRequest, route: RouteDecision, packed: PackedEvidence) -> int:
+    def _estimate_tokens(
+        request: QueryRequest, route: RouteDecision, packed: PackedEvidence
+    ) -> int:
         material = " ".join([STATIC_SYSTEM_PROMPT, request.query, route.rationale, packed.summary])
         return max(1, estimate_tokens(material))

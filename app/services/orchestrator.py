@@ -19,14 +19,19 @@ from app.core.config import settings
 from app.core.tokens import cost_for, estimate_tokens, max_input_tokens_for_budget
 from app.domain.models import AnswerResult, PackedEvidence, QueryRequest, RouteDecision, SearchMode
 from app.integrations.cognee_client import CogneeClient
-from app.integrations.langfuse_tracing import trace_synthesis_span
+from app.integrations.langfuse_tracing import (
+    record_attributes,
+    record_usage,
+    trace_synthesis_span,
+)
 from app.observability.eval_trace import get_eval_run_context
+from app.observability.gen_ai import gen_ai_attributes
 from app.observability.metrics import metrics
 from app.services.cache import ContentAddressedCache
 from app.services.evidence import EvidencePacker
 from app.services.normalizer import QueryNormalizer
 from app.services.router import QueryRouter
-from app.services.runtime_controller import ControlAction, RuntimeController
+from app.services.runtime_controller import ControlAction, RuntimeController, StopReason
 from app.services.synthesizer import AnswerSynthesizer
 
 # Hard ceiling on retrieval attempts, independent of the retry budget. Protects
@@ -132,7 +137,13 @@ class QueryOrchestrator:
 
             packed = self.evidence_packer.pack(result, evidence_budget=route.evidence_budget)
             decision = self.runtime_controller.decide(
-                request, route, packed, retry_count, frozenset(attempted), widened
+                request,
+                route,
+                packed,
+                retry_count,
+                frozenset(attempted),
+                widened,
+                elapsed_ms=int((perf_counter() - answer_start) * 1000),
             )
 
             if decision.action is ControlAction.ACCEPT:
@@ -154,6 +165,7 @@ class QueryOrchestrator:
                     route=route,
                     retry_count=retry_count,
                     reason=decision.reason,
+                    stop_reason=decision.stop_reason,
                     escalations=escalations,
                     retrieval_ms=retrieval_ms,
                     answer_start=answer_start,
@@ -172,6 +184,7 @@ class QueryOrchestrator:
                 route=route,
                 retry_count=retry_count,
                 reason="attempt_ceiling_reached",
+                stop_reason=StopReason.ATTEMPT_CEILING,
                 escalations=escalations,
                 retrieval_ms=retrieval_ms,
                 answer_start=answer_start,
@@ -209,9 +222,37 @@ class QueryOrchestrator:
             run_id=eval_ctx.run_id if eval_ctx else None,
             baseline=eval_ctx.baseline if eval_ctx else None,
             query_id=eval_ctx.query_id if eval_ctx else None,
-            metadata={"route_mode": route.mode.value},
-        ):
+            metadata={
+                "route_mode": route.mode.value,
+                "route_signals": route.signals,
+                "route_confident": route.confident,
+                "evidence_items": len(packed.evidence_items),
+                "evidence_tokens": packed.token_estimate,
+                "retry_count": retry_count,
+            },
+            model=self.synthesizer.model,
+        ) as span:
             synthesis = await self.synthesizer.synthesize(request, route, packed)
+            cost = cost_for(
+                model=self.synthesizer.model,
+                input_tokens=synthesis.input_tokens_estimate,
+                output_tokens=estimate_tokens(synthesis.answer),
+                estimated=synthesis.usage_measured is False,
+            )
+            record_usage(
+                span,
+                input_tokens=cost.input_tokens,
+                output_tokens=cost.output_tokens,
+                usd=cost.usd,
+            )
+            record_attributes(
+                span,
+                gen_ai_attributes(
+                    cost.as_telemetry(),
+                    model=self.synthesizer.model,
+                    route_mode=route.mode.value,
+                ),
+            )
         synthesis_ms = int((perf_counter() - synthesis_start) * 1000)
 
         # A failed LLM call yields a placeholder, not an answer. Accepting it
@@ -223,6 +264,7 @@ class QueryOrchestrator:
                 route=route,
                 retry_count=retry_count,
                 reason=f"synthesis_failed:{synthesis.failure_reason}",
+                stop_reason=StopReason.SYNTHESIS_FAILED,
                 escalations=escalations,
                 retrieval_ms=retrieval_ms,
                 answer_start=answer_start,
@@ -230,13 +272,6 @@ class QueryOrchestrator:
             )
 
         total_ms = int((perf_counter() - answer_start) * 1000)
-
-        cost = cost_for(
-            model=self.synthesizer.model,
-            input_tokens=synthesis.input_tokens_estimate,
-            output_tokens=estimate_tokens(synthesis.answer),
-            estimated=synthesis.usage_measured is False,
-        )
 
         answer_result = AnswerResult(
             answer=synthesis.answer,
@@ -255,6 +290,7 @@ class QueryOrchestrator:
                 "synthesis_ms": synthesis_ms,
                 "total_ms": total_ms,
                 "escalation_reason": escalations[-1] if escalations else None,
+                "stop_reason": (decision.stop_reason.value if decision.stop_reason else None),
                 "escalation_chain": escalations,
                 "attempted_modes": sorted(m.value for m in attempted),
                 "route_signals": route.signals,
@@ -289,6 +325,7 @@ class QueryOrchestrator:
         retry_count: int,
         reason: str,
         escalations: list[str],
+        stop_reason: StopReason | None = None,
         retrieval_ms: int,
         answer_start: float,
         packed: PackedEvidence | None,
@@ -301,6 +338,7 @@ class QueryOrchestrator:
             "synthesis_ms": 0,
             "total_ms": total_ms,
             "escalation_reason": reason,
+            "stop_reason": stop_reason.value if stop_reason else None,
             "escalation_chain": escalations,
             "route_signals": route.signals,
             "degraded": packed.degraded if packed else False,

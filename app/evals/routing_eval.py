@@ -61,8 +61,8 @@ class RoutingReport:
 
 def load_corpus(path: Path) -> list[EvalQuery]:
     rows: list[EvalQuery] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
         if not line or line.startswith("#"):
             continue
         rows.append(EvalQuery.model_validate_json(line))
@@ -151,8 +151,10 @@ def format_report(reports: list[RoutingReport]) -> str:
     lines.extend(
         [
             "",
-            "Accuracy on the corpus the rules were written against is an upper "
-            "bound, not a measurement. Quote the held-out number.",
+            (
+                "Accuracy on the corpus the rules were written against is an "
+                "upper bound, not a measurement. Quote the held-out number."
+            ),
             "",
         ]
     )

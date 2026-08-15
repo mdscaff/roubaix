@@ -136,7 +136,7 @@ def _record_timeline(port: int, duration_s: float, out_video: Path) -> None:
     frames_dir.mkdir(parents=True)
 
     url = f"http://{HOST}:{port}/demo?record=1&duration={duration_s:.2f}"
-    total_frames = max(1, int(round(duration_s * RECORD_FPS)))
+    total_frames = max(1, round(duration_s * RECORD_FPS))
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -176,7 +176,7 @@ def _record_timeline(port: int, duration_s: float, out_video: Path) -> None:
         "yuv420p",
         str(out_video),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
     if proc.returncode != 0:
         print(proc.stderr or proc.stdout, file=sys.stderr)
         proc.check_returncode()
@@ -199,7 +199,7 @@ def _mux_mp4(video: Path, audio: Path, out_mp4: Path) -> None:
         "-shortest",
         str(out_mp4),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
     if proc.returncode != 0:
         print(proc.stderr or proc.stdout, file=sys.stderr)
         proc.check_returncode()
@@ -250,12 +250,15 @@ def main() -> int:
             _write_narration_elevenlabs(text, audio_path)
         else:
             asyncio.run(_write_narration_edge_tts(text, audio_path))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - CLI top level; report and exit non-zero
         print(f"Narration failed: {e}", file=sys.stderr)
         return 1
 
     duration = _ffprobe_duration_seconds(audio_path) or 55.0
-    print(f"Narration duration: {duration:.1f}s — recording {int(duration * RECORD_FPS)} frames at {RECORD_FPS} fps")
+    print(
+        f"Narration duration: {duration:.1f}s — recording "
+        f"{int(duration * RECORD_FPS)} frames at {RECORD_FPS} fps"
+    )
 
     proc = _start_server(args.port)
     try:
