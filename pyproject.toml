@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "roubaix"
-version = "0.3.0"
+version = "0.3.1"
 description = "Cognee-centered graph retrieval experiment with cost-aware routing and DSPy/GEPA optimization"
 readme = "README.md"
 requires-python = ">=3.11"

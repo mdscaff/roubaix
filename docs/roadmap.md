@@ -10,6 +10,30 @@ described as done.
 
 ---
 
+## Diagnostic lens: harness, loop, graph
+
+A useful framing for deciding *where* a reliability problem lives, and the rule
+that comes with it: pick the layer by diagnosing the failure mode, not by
+defaulting to the most complex one.
+
+- **Harness** — the environment around the model: retrieval surfaces, evidence
+  injection, caching, timeouts, budgets, telemetry, failure policy. This is
+  where Roubaix lives and where nearly all of its value is.
+- **Loop** — repeated work → evidence → feedback → stop conditions. Roubaix's
+  loop is deliberately small: one bounded pass with a terminating widen/escalate
+  ladder and an explicit stop reason. It is not an autonomous agent loop and
+  should not become one.
+- **Graph** — explicit topology, branching, joins, controlled cycles. Roubaix
+  is a fixed six-stage pipeline. Modelling it as a graph would add a
+  serialization format and a scheduler to express something that is currently a
+  readable `for` loop. Revisit only if approvals or multi-specialist flows
+  appear.
+
+Nearly every remaining item in this roadmap is a *harness* item. That is the
+correct centre of gravity for a retrieval service, and it is worth saying
+explicitly, because the pull toward graph ceremony is strong and mostly wrong
+here. See [ADR-004](adr/ADR-004-evaluate-strands-adopt-patterns-not-dependency.md).
+
 ## The positioning problem, stated first
 
 **Cognee now ships its own rule-based query router upstream**
@@ -55,7 +79,18 @@ which Roubaix never sets.
 
 *Lands in:* `QueryRouter._decision`, `CogneeClient.search`.
 
-### 2. Emit OpenTelemetry GenAI spans
+### 2. Emit OpenTelemetry GenAI spans *(partially done)*
+
+**Done:** attribute naming (`app/observability/gen_ai.py`) maps Roubaix
+telemetry onto `gen_ai.usage.*` / `gen_ai.request.model`, with Roubaix
+dimensions namespaced under `roubaix.*`. Langfuse v4 is OpenTelemetry-based, so
+these land in real spans. The per-span client construction and the blocking
+`flush()` on the request path are both gone.
+
+**Remaining:** a first-class span tree (`invoke_workflow` → `plan` →
+`execute_tool` → `chat`) with an OTLP exporter, so traces work without Langfuse.
+
+Original notes follow.
 
 `RouteDecision.signals`, `ControlDecision.reason`, and the cost telemetry are
 already exactly the structured data a serious harness exports — and all of it

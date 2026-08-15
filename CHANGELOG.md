@@ -2,6 +2,59 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.3.1] — 2026-08-15
+
+Dependency refresh and selective adoption of agent-harness patterns.
+
+### Fixed
+
+- **Langfuse tracing was broken against the current major version.** The floor
+  was `>=2.0.0` while the code called `Langfuse.start_span`, removed in v4.
+  A fresh install resolved to v4 and would have raised `AttributeError` on the
+  first traced query. Rewritten against the v4 OpenTelemetry-based API.
+- **Freshness contract was abandoned by escalation.** The check keyed on the
+  mode currently in play, so once the ladder moved past `TEMPORAL` to a broader
+  mode, undated evidence was returned as if freshness had been validated. It now
+  keys on "TEMPORAL was attempted and nothing is dated".
+- **Blocking `Path.is_file()` inside an async endpoint**; **`subprocess.run`
+  without `check`** in the demo builder (a failing ffmpeg passed silently);
+  **implicit string concatenation inside list literals**, where a missing comma
+  reads as concatenation.
+- Migrated `(str, Enum)` classes to `StrEnum`, permanently removing the
+  interpolation footgun where `f"{mode}"` rendered `SearchMode.CHUNKS`.
+
+### Added
+
+- **`StopReason`** — a closed vocabulary for why the control loop stopped. A
+  budget trip is an outcome, not an error, so `limit_latency` sits in the same
+  enum as `sufficient_evidence`. Closes the earlier finding that escalation
+  reasons were free text and could not be aggregated.
+- **`max_latency_ms` is enforced.** It had been declared on the request model
+  and read nowhere. Documented as a soft cap checked at loop boundaries.
+- **`CheckErrorPolicy`** — per-check behaviour when a control check itself
+  raises. Defaults to DENY; PROCEED exists and is explicitly named fail-open.
+- **OpenTelemetry GenAI attribute mapping** (`app/observability/gen_ai.py`),
+  with Roubaix dimensions under `roubaix.*` and the semconv version pinned and
+  reported. No claim of compliance — nothing in that spec is Stable.
+- **Explicit ruff rule set.** The default selection changes between releases, so
+  relying on it meant a dependency upgrade silently changed what CI enforces.
+- `tiktoken` declared explicitly; it was only present transitively via cognee,
+  so token-estimate accuracy depended on which extras were installed.
+- [ADR-004](docs/adr/ADR-004-evaluate-strands-adopt-patterns-not-dependency.md).
+
+### Changed
+
+- All dependencies upgraded to current and floors raised to the tested versions.
+
+### Rejected
+
+- **Strands Agents SDK.** A genuine runtime controller, but every control
+  primitive it has is denominated in units Roubaix does not have — turns, tool
+  calls, conversation messages. Four of its ten hook events are tool events, and
+  there is no extension point for a stage that is neither a model call nor a
+  tool call, which is all four of Roubaix's interesting stages. Four of its
+  patterns were reimplemented instead.
+
 ## [0.3.0] — 2026-08-15
 
 Correctness and honesty pass following a full audit of the pipeline against

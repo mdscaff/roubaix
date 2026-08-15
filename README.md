@@ -49,13 +49,15 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 
 **Routing is a scored rule engine, not an if/elif ladder.** Competing signals are common — "match all services *connected to* the billing node" is both structural and relational. A ladder resolves that by author ordering; a score resolves it by weight, ties break toward the cheaper mode, and every decision records the named signals that produced it, so a route can be replayed from telemetry rather than re-argued.
 
-**Fail-closed is real, and it fires on four conditions**: fabricated evidence (a retrieval failure must never be synthesized into a fluent answer), a freshness contract that produced no dated evidence, an exhausted escalation ladder, and a failed LLM call. Each carries a machine-readable reason.
+**Fail-closed is real, and it fires on six conditions**: fabricated evidence (a retrieval failure must never be synthesized into a fluent answer), a freshness contract that produced no dated evidence, an exhausted escalation ladder, an exhausted retry budget, a failed LLM call, and a control check that itself raised — because a check that cannot run has not passed. Each carries a `stop_reason` from a closed vocabulary.
 
 **Freshness means a timestamp exists.** Temporal retrieval degrades silently to unfiltered search when it cannot extract an interval from the query — evidence comes back, so a count-based gate marks the contract met. Roubaix requires a parseable date in the packed evidence and refuses otherwise.
 
 **Escalation widens before it climbs.** Depth is a cheaper dial than algorithm, so the controller retries the same mode with a larger evidence budget before buying a more expensive one.
 
-**Cost ceilings shrink the request, they don't refuse it.** A caller's `max_cost_cents` trims the evidence pack to fit rather than failing — the caller asked for a cheaper answer, not no answer.
+**Cost ceilings shrink the request, they don't refuse it.** A caller's `max_cost_cents` trims the evidence pack to fit rather than failing — the caller asked for a cheaper answer, not no answer. A `max_latency_ms` ceiling stops the loop and returns whatever usable evidence exists. Both are soft caps checked at loop boundaries, so an in-flight retrieval can overshoot; that is stated rather than implied.
+
+**Stopping is a vocabulary, not a log line.** Every outcome carries a `stop_reason` from a closed enum — `sufficient_evidence`, `limit_latency`, `freshness_unverifiable`, `degraded_retrieval`, `ladder_exhausted`, and so on. A budget trip is an outcome, not an error, so it lives in the same enum as a normal accept. That makes "how often do we stop on the latency ceiling" a query over telemetry rather than a grep over strings.
 
 **Evidence reduction is disclosed.** Withheld items leave a marker naming how to retrieve them, so the synthesizer can distinguish "there was no more evidence" from "there was more and it was dropped".
 
@@ -69,14 +71,17 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | Evidence packing (dedup, token budget, disclosure) | Working |
 | Runtime controller (widen → escalate → fail closed) | Working |
 | Cost accounting (measured vs estimated) | Working; no live run recorded |
+| Caller ceilings (`max_cost_cents`, `max_latency_ms`) | Working; cost trims the pack, latency stops the loop |
+| Stop-reason vocabulary + OTel `gen_ai.*` attributes | Working |
 | Eval harness (4 baselines, losable gates, validity warnings) | Working |
 | LLM synthesis | OpenRouter; failures fail closed |
 | NodeSet scoping | Caller-supplied and honoured; **not derived** — see roadmap |
 | Temporal / Nexus | Scaffold; behind the main orchestrator (see ADR-002) |
 | DSPy / GEPA | Not wired. Design in [docs/roadmap.md](docs/roadmap.md) |
 | AdalFlow | **Rejected** — see [ADR-003](docs/adr/ADR-003-reject-adalflow-keep-explicit-controller.md) |
+| Strands Agents SDK | **Patterns adopted, dependency refused** — see [ADR-004](docs/adr/ADR-004-evaluate-strands-adopt-patterns-not-dependency.md) |
 
-**103 tests passing.**
+**119 tests passing.** All dependencies current as of August 2026.
 
 ## Quickstart
 
