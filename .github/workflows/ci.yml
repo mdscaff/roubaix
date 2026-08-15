@@ -34,3 +34,12 @@ jobs:
 
       - name: Pytest
         run: uv run pytest -q
+
+      # Routing is a pure function of the query, so it can be measured in CI
+      # with no Cognee instance and no LLM. The gate is on the held-out corpus:
+      # accuracy on the corpus the rules were written against proves nothing.
+      - name: Routing accuracy (held-out)
+        run: >-
+          uv run python scripts/eval_routing.py
+          --min-heldout-accuracy 0.80
+          --require-lift

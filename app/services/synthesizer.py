@@ -124,7 +124,11 @@ class AnswerSynthesizer:
         usage = body.get("usage") or {}
         reported = usage.get("prompt_tokens")
         measured = isinstance(reported, int) and reported > 0
-        input_tokens = int(reported) if measured else self._estimate_tokens(request, route, packed)
+        input_tokens = (
+            int(reported)
+            if isinstance(reported, int) and reported > 0
+            else self._estimate_tokens(request, route, packed)
+        )
         return SynthesisResult(
             answer=answer,
             input_tokens_estimate=input_tokens,

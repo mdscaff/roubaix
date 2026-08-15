@@ -45,7 +45,7 @@ class EvidencePacker:
 
         max_items = min(
             evidence_budget or settings.max_evidence_items,
-            settings.max_evidence_items,
+            max(settings.max_evidence_items, evidence_budget or 0),
         )
         max_tokens = token_budget or settings.evidence_token_budget
 
