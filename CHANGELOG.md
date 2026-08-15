@@ -4,184 +4,124 @@ All notable changes to Roubaix are documented here.
 
 ## [0.4.0] — 2026-08-15
 
-DSPy wired for real; AdalFlow fully removed from the documentation.
+A correctness and honesty pass over the whole pipeline, following a full audit
+against the stated design and a survey of comparable systems. Supersedes the
+unreleased 0.3.0 and 0.3.1 work, which is folded in here.
 
-### Added
-
-- **DSPy learned router stage** (`app/integrations/dspy_program.py`). It runs
-  only on the band the deterministic router flags as unconfident — measured at
-  42% of held-out traffic, 73% accurate, holding 3 of the 4 misses, against 93%
-  for the confident band. 58% of queries never reach an LM. Implements the same
-  `route()` contract, so the orchestrator cannot tell which router it holds.
-- **GEPA optimizer** (`app/integrations/gepa_optimizer.py`) with a cost-aware
-  feedback metric. The score is `0.7 * correct + 0.3 * cost_efficiency`, because
-  a correctness-only metric converges on the most expensive mode — it is never
-  *wrong*, only wasteful. The metric returns text, not a float: GEPA passes
-  `feedback` to the reflection prompt verbatim, so it names over-escalation and
-  under-escalation distinctly in Roubaix's own vocabulary.
-- **`scripts/optimize_router.py`**, with `--dry-run` (reports the split and the
-  ~1300-metric-call budget without calling an LM) and a hard refusal to compile
-  on the held-out corpus.
-- **`scripts/eval_routing.py --dspy-artifact`** so a compiled program can be
-  judged on the held-out corpus, reporting how many queries reached the LM.
-- **`Baseline.DSPY_ROUTER`**, excluded from the default set so an eval run never
-  starts calling a paid API on its own.
-- [ADR-005](docs/adr/ADR-005-dspy-learned-stage-over-the-ambiguous-band.md).
-
-### Changed
-
-- The DSPy stage is an *enhancement*: a missing `opt` extra, a missing artifact,
-  an unconfigured LM, a provider error, or an invalid mode string all fall back
-  to the deterministic decision. The eval baseline is the one place this
-  inverts — it raises, because a row labelled `dspy_router` that silently
-  measured the deterministic router would report a comparison that never
-  happened.
-- Removed the last AdalFlow references from `docs/overview.md`, `CLAUDE.md`, and
-  the demo narration. ADR-001's AdalFlow line is marked superseded rather than
-  rewritten.
-- Corrected a claim previously repeated in `router.py` and the docs: GEPA
-  optimizes instruction *text*, not numeric weights. The rule weights are
-  hand-tuned and measured, not optimizer output.
-
-### Not established
-
-No compile run has been recorded. Whether GEPA beats the scored rule engine on
-the held-out corpus is open, and a negative result would be a legitimate finding
-given the deterministic router already scores 85% against 23% for the best fixed
-mode. No number from a compile is claimed anywhere.
-
-## [0.3.1] — 2026-08-15
-
-Dependency refresh and selective adoption of agent-harness patterns.
-
-### Fixed
-
-- **Langfuse tracing was broken against the current major version.** The floor
-  was `>=2.0.0` while the code called `Langfuse.start_span`, removed in v4.
-  A fresh install resolved to v4 and would have raised `AttributeError` on the
-  first traced query. Rewritten against the v4 OpenTelemetry-based API.
-- **Freshness contract was abandoned by escalation.** The check keyed on the
-  mode currently in play, so once the ladder moved past `TEMPORAL` to a broader
-  mode, undated evidence was returned as if freshness had been validated. It now
-  keys on "TEMPORAL was attempted and nothing is dated".
-- **Blocking `Path.is_file()` inside an async endpoint**; **`subprocess.run`
-  without `check`** in the demo builder (a failing ffmpeg passed silently);
-  **implicit string concatenation inside list literals**, where a missing comma
-  reads as concatenation.
-- Migrated `(str, Enum)` classes to `StrEnum`, permanently removing the
-  interpolation footgun where `f"{mode}"` rendered `SearchMode.CHUNKS`.
-
-### Added
-
-- **`StopReason`** — a closed vocabulary for why the control loop stopped. A
-  budget trip is an outcome, not an error, so `limit_latency` sits in the same
-  enum as `sufficient_evidence`. Closes the earlier finding that escalation
-  reasons were free text and could not be aggregated.
-- **`max_latency_ms` is enforced.** It had been declared on the request model
-  and read nowhere. Documented as a soft cap checked at loop boundaries.
-- **`CheckErrorPolicy`** — per-check behaviour when a control check itself
-  raises. Defaults to DENY; PROCEED exists and is explicitly named fail-open.
-- **OpenTelemetry GenAI attribute mapping** (`app/observability/gen_ai.py`),
-  with Roubaix dimensions under `roubaix.*` and the semconv version pinned and
-  reported. No claim of compliance — nothing in that spec is Stable.
-- **Explicit ruff rule set.** The default selection changes between releases, so
-  relying on it meant a dependency upgrade silently changed what CI enforces.
-- `tiktoken` declared explicitly; it was only present transitively via cognee,
-  so token-estimate accuracy depended on which extras were installed.
-- [ADR-004](docs/adr/ADR-004-evaluate-strands-adopt-patterns-not-dependency.md).
-
-### Changed
-
-- All dependencies upgraded to current and floors raised to the tested versions.
-
-### Rejected
-
-- **Strands Agents SDK.** A genuine runtime controller, but every control
-  primitive it has is denominated in units Roubaix does not have — turns, tool
-  calls, conversation messages. Four of its ten hook events are tool events, and
-  there is no extension point for a stage that is neither a model call nor a
-  tool call, which is all four of Roubaix's interesting stages. Four of its
-  patterns were reimplemented instead.
-
-## [0.3.0] — 2026-08-15
-
-Correctness and honesty pass following a full audit of the pipeline against
-its stated design, plus a survey of comparable agent harnesses and graph-memory
-systems. See `docs/roadmap.md` for what the research recommends next.
+The short version: six defects were found where the system reported success it
+had not established, the eval harness could not fail, and three named
+architecture components did not exist. All of that is now either fixed, deleted,
+or labelled.
 
 ### Fixed — correctness
 
-- **Fabricated evidence could be answered from and cached.** A Cognee failure
-  was caught and replaced with placeholder evidence, synthesized into a fluent
-  answer, marked `accepted: true`, and cached for an hour. Retrieval failures
-  now carry a `degraded` flag; the controller fails closed on it by default and
+Each was reproduced before being fixed, and each has a regression test.
+
+- **Fabricated evidence was answered from and cached.** A Cognee failure was
+  caught and replaced with placeholder evidence, synthesized into a fluent
+  answer marked `accepted: true`, and cached for an hour. A transient outage
+  produced invented answers indistinguishable from grounded ones. Retrieval
+  failures now carry a `degraded` flag, the controller fails closed on it, and
   degraded answers are never cached.
-- **Inverted relationships shared a cache key.** `normalize()` sorted tokens, so
-  "does A depend on B" and "does B depend on A" produced the same key and one
-  could be served the other's answer. Normalization is now order-preserving.
+- **Inverted relationships collided on one cache key.** `normalize()` sorted
+  tokens, so "does A depend on B" and "does B depend on A" produced the same
+  key and one could be served the other's answer. Normalization is now
+  order-preserving; the order-insensitive form moved to `fingerprint()`,
+  documented as unsafe for keys.
 - **Router phrases could never match.** Multi-word patterns were matched against
-  the sorted, stop-word-stripped bag, so "depends on" and "how are ... organized"
-  were unmatchable. `GRAPH_COMPLETION` was unreachable entirely, capping the
-  multi-hop bucket at zero.
+  the sorted, stop-word-stripped bag, making "depends on" and
+  "how are … organized" unmatchable. `GRAPH_COMPLETION` was unreachable
+  entirely, capping the multi-hop bucket at zero.
 - **Substring matching bought expensive modes.** "concurrent" matched "current"
-  (→ TEMPORAL, 120s TTL), "knowledge" matched "edge" (→ CYPHER). Patterns now
-  use word boundaries.
-- **Freshness contract was bypassed by the cache and satisfiable without a
-  timestamp.** `freshness_required` is now part of the cache key, and a
-  freshness-required query must return evidence carrying a parseable date or the
-  controller refuses.
+  (→ TEMPORAL, 120s TTL); "knowledge" matched "edge" (→ CYPHER).
+- **The freshness contract was bypassed by the cache**, and satisfiable by any
+  non-empty result. It was then *abandoned by escalation* — once the ladder
+  moved past TEMPORAL, undated evidence was returned as if freshness had been
+  validated. The check now keys on "TEMPORAL was attempted and nothing is
+  dated".
 - **A dead LLM provider was invisible.** Synthesis failures returned a template
-  marked accepted. They now fail closed. A malformed JSON body (ValueError, not
-  an httpx.HTTPError) previously escaped as an unhandled 500.
-- **The evidence budget was discarded at packing time**, making the router's
-  cost decision decorative.
-- **The Cognee env bridge was a no-op in the API process** — cognee was imported
-  before `configure_cognee()` ran.
-- **`Timer` minted one metric key per distinct millisecond** — unbounded
-  cardinality.
+  marked accepted. A malformed JSON body (`ValueError`, not `httpx.HTTPError`)
+  escaped as an unhandled 500.
+- **Langfuse tracing was broken against its current major version.** The floor
+  was `>=2.0.0` while the code called `Langfuse.start_span`, removed in v4.
+- The evidence budget was discarded at packing time, making routing decorative;
+  the Cognee env bridge was a no-op in the API process (cognee was imported
+  before `configure_cognee()` ran); `Timer` minted one metric key per distinct
+  millisecond; a blocking `Path.is_file()` sat in an async endpoint; the demo
+  page substituted invented telemetry when the API was unreachable, and that
+  fabricated payload is what got filmed into the demo video.
 
 ### Added
 
-- **Scored router** with weighted signals, cost-rank tie-break, negation
-  suppression, confidence margin, and per-decision signal/score telemetry.
-- **Progressive escalation** — widen the same mode before climbing a terminating
-  ladder; no mode is attempted twice.
+- **Scored router** — weighted signals, word-boundary patterns, cost-rank
+  tie-break, negation suppression, confidence margin, and per-decision
+  signal/score telemetry so a route can be replayed rather than re-argued.
+- **Progressive escalation** — widen the same mode before climbing a
+  terminating ladder; no mode is attempted twice.
+- **`StopReason`** — a closed vocabulary for why the loop stopped. A budget trip
+  is an outcome, not an error, so `limit_latency` sits in the same enum as
+  `sufficient_evidence`.
+- **Caller ceilings enforced.** `max_cost_cents` trims the evidence pack rather
+  than refusing; `max_latency_ms` stops the loop. Both documented as soft caps
+  checked at loop boundaries.
+- **`CheckErrorPolicy`** — per-check behaviour when a control check itself
+  raises. Defaults to DENY; PROCEED exists and is named fail-open.
 - **Real cost accounting** — provider-reported usage when available, explicitly
   labelled estimates otherwise, per-model price table.
-- **Caller cost ceiling** that trims the evidence pack rather than refusing.
-- **Held-out routing corpus** (`evals/queries_heldout.jsonl`, n=26) and
-  `scripts/eval_routing.py`, gated in CI. Measured: **85% held-out accuracy vs
-  23% for the best single fixed mode**.
-- **`full_context` eval baseline** — the comparison most likely to embarrass a
-  graph system.
-- **Losable acceptance gates** with PASS/FAIL/UNKNOWN verdicts and run validity
-  warnings.
-- **Timeouts** on retrieval and synthesis; pooled HTTP client.
-- `docs/roadmap.md`, ADR-003.
+- **DSPy learned router stage**, running only on the band the deterministic
+  router flags unconfident — 42% of held-out traffic, 73% accurate, holding 3 of
+  4 misses, against 93% for the confident band. 58% of queries never reach an
+  LM. Any failure degrades to the deterministic decision.
+- **GEPA optimizer** with a cost-aware feedback metric (`0.7 * correct + 0.3 *
+  cost_efficiency`, because a correctness-only metric converges on the most
+  expensive mode) that returns text rather than a float, since GEPA passes it to
+  the reflection prompt verbatim.
+- **Held-out routing corpus** (n=26) and `scripts/eval_routing.py`, gated in CI.
+- **Losable acceptance gates** with PASS/FAIL/**UNKNOWN** verdicts, a
+  `full_context` baseline, and validity warnings printed above the results.
+- **OpenTelemetry GenAI attribute mapping**, with Roubaix dimensions namespaced
+  under `roubaix.*` and the semconv version pinned and reported.
+- Retrieval and synthesis timeouts; a pooled HTTP client; API response model and
+  a 502 boundary handler; explicit ruff rule set; `tiktoken` declared.
+- ADRs [003](docs/adr/ADR-003-reject-adalflow-keep-explicit-controller.md),
+  [004](docs/adr/ADR-004-evaluate-strands-adopt-patterns-not-dependency.md),
+  [005](docs/adr/ADR-005-dspy-learned-stage-over-the-ambiguous-band.md).
 
 ### Removed
 
-- **AdalFlow.** Evaluated and rejected — it is an auto-optimization library with
-  no retry/escalation/fallback primitives, overlapping DSPy rather than the
-  runtime controller, with no release since September 2025. See ADR-003.
-- **Fabricated demo telemetry.** The demo page substituted invented timings and
-  a route mode the router could not emit when the API was unreachable.
+- **AdalFlow.** Named as the runtime-control layer before being evaluated. It is
+  an auto-optimization library with no retry/escalation/fallback primitives,
+  overlapping DSPy rather than the controller, with no release since Sept 2025.
+- **Strands Agents SDK** was evaluated and its dependency refused — its control
+  primitives are denominated in turns, tool calls, and conversation messages,
+  none of which Roubaix has. Four of its patterns were reimplemented instead.
+- Fabricated demo telemetry; the `not_implemented` placeholders.
 
 ### Changed
 
-- README leads with the one real measurement and an explicit "what is not
-  measured" section.
-- API declares `AnswerResult` as its response model and returns 502 rather than
-  leaking a traceback.
-- Cache key covers query, dataset, freshness, NodeSet scope, model, caller
-  identity, and a policy version.
+- All dependencies upgraded to current (August 2026) with floors raised to the
+  tested versions. `(str, Enum)` classes migrated to `StrEnum`, removing the
+  interpolation footgun where `f"{mode}"` rendered `SearchMode.CHUNKS`.
+- Docs now match the code. The README leads with the one real measurement and an
+  explicit "what is not measured" section.
+- Corrected a claim this repo had repeated: GEPA optimizes instruction *text*,
+  not numeric weights, so the rule weights are hand-tuned and measured.
 
-### Known gaps
+### Measured
 
-- NodeSet scoping is caller-supplied, not derived.
-- No external benchmark has been run; no live-retrieval cost figure exists.
-- DSPy/GEPA are not wired. Prompt-prefix caching yields no discount at the
-  current prefix length.
+| Corpus | n | Routing accuracy | Best single fixed mode |
+|---|---:|---:|---:|
+| held-out (never tuned against) | 26 | **85%** | 23% |
+| tuning (rules written against it) | 20 | 100% — an upper bound, not a measurement | 30% |
+
+Tests 41 → 140 (121 with the DSPy suite skipped, which is how CI runs).
+
+### Not established
+
+No run against live Cognee with a live LLM has been recorded, so there is no
+cost, latency, or answer-quality figure to quote — and none is claimed. No GEPA
+compile has been run; whether it beats the scored rule engine is open, and a
+negative result would be a legitimate finding.
 
 ## [0.2.0] — 2026-05-30
 

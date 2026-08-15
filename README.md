@@ -10,7 +10,7 @@ The design constraint that shapes everything else: **use the graph to retrieve a
 
 ## What is actually measured
 
-One number here is a real measurement. It is reported with the reference points that make it readable, and with the corpus it came from.
+Routing is the one part of the pipeline that can be measured honestly without a live graph or an LLM, so it is the one part with numbers. Each is reported with the corpus it came from and the reference points that make it readable.
 
 | Metric | Value | How to read it |
 |---|---|---|
@@ -76,7 +76,7 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | Cost accounting (measured vs estimated) | Working; no live run recorded |
 | Caller ceilings (`max_cost_cents`, `max_latency_ms`) | Working; cost trims the pack, latency stops the loop |
 | Stop-reason vocabulary + OTel `gen_ai.*` attributes | Working |
-| Eval harness (4 baselines, losable gates, validity warnings) | Working |
+| Eval harness (5 baselines, losable gates, validity warnings) | Working; 4 run by default, `dspy_router` on request |
 | LLM synthesis | OpenRouter; failures fail closed |
 | NodeSet scoping | Caller-supplied and honoured; **not derived** — see roadmap |
 | Temporal / Nexus | Scaffold; behind the main orchestrator (see ADR-002) |
@@ -115,12 +115,37 @@ Note: the Postgres graph backend is a development convenience. Cognee documents 
 ### Run evals
 
 ```bash
-uv run python scripts/eval_routing.py              # routing only, no dependencies
-uv run python scripts/run_eval.py --report        # full pipeline, needs live Cognee to mean anything
+# Routing only. No Cognee, no LLM, no network. This is the CI gate.
+uv run python scripts/eval_routing.py
+
+# Full pipeline. Needs live Cognee and a live LLM to mean anything;
+# without them the report says so in its validity warnings.
+uv run python scripts/run_eval.py --report
 ```
+
+### Optional: compile the learned router
+
+```bash
+uv sync --extra opt
+
+# Report the plan and the budget without calling an LM.
+uv run --extra opt python scripts/optimize_router.py --dry-run
+
+# Compile (costs money — see the budget note in gepa_optimizer.optimize).
+uv run --extra opt python scripts/optimize_router.py \
+    --task-model openai/gpt-4.1-mini --reflection-model openai/gpt-5
+
+# Judge the artifact on the held-out corpus.
+uv run --extra opt python scripts/eval_routing.py \
+    --dspy-artifact artifacts/router_gepa.json
+```
+
+Compiling on the held-out corpus is refused: training on the evaluation set
+would destroy the only unbiased measurement here.
 
 ## Repository map
 
+- `CHANGELOG.md` — release notes
 - `docs/architecture.md` — technical architecture memo
 - `docs/roadmap.md` — what to build next, with the evidence behind each item
 - `docs/evaluation-plan.md` — metrics, corpora, known misses, benchmark plan
@@ -139,6 +164,13 @@ uv run python scripts/run_eval.py --report        # full pipeline, needs live Co
 - Instrument every decision so routing quality improves with evidence, not opinion.
 - Never report an estimate as a measurement, and never let an unmeasured gate read as a pass.
 - Read `AGENTS.md` and `CLAUDE.md` before making architectural changes.
+
+## Reading order for a skeptic
+
+1. **[CHANGELOG.md](CHANGELOG.md)** — what changed and, more usefully, what was found broken.
+2. **"What is not measured"** above — the claims deliberately not made.
+3. **[docs/evaluation-plan.md](docs/evaluation-plan.md)** — the corpora, the four known held-out misses left unfixed on purpose, and what `UNKNOWN` means in a gate.
+4. **[docs/adr/](docs/adr/)** — the decisions, including three things evaluated and not adopted.
 
 ## License
 
