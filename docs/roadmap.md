@@ -67,6 +67,10 @@ Three refinements from the upstream router are worth porting outright. One
 
 ### 1. Derive NodeSet scope instead of accepting it
 
+**Design now specified** as Phase C of [docs/implementation-plan.md](implementation-plan.md)
+(entity anchoring per SubgraphRAG, ICLR 2025; learned triple scorer deferred
+until telemetry can mine its training labels). Original notes follow.
+
 `CLAUDE.md` calls NodeSet scoping "a first-class cost lever". It is currently
 caller-supplied and passed through: if the caller sends nothing, nothing is
 scoped, and the cheapest available cost lever is inert on every organic query.
@@ -113,6 +117,13 @@ is the field that would finally make the prompt-cache claim falsifiable.
 `cognee_client.py`.
 
 ### 3. A retrieval-quality gate in the controller
+
+**Superseded by a full design:** a verified deep-research pass (2026-08-15)
+turned this item into Phase A of [docs/implementation-plan.md](implementation-plan.md),
+with the key upgrade that sufficiency must be judged at the **evidence-set
+level**, not per-chunk — per-chunk scoring structurally cannot detect a missing
+multi-hop link (SURE-RAG 2026; Sufficient Context, ICLR 2025). Original notes
+follow.
 
 The controller's only correctness proxy is evidence count and token volume. One
 *irrelevant* chunk passes. Corrective-RAG's evaluator (correct / ambiguous /

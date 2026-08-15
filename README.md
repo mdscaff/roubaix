@@ -148,6 +148,7 @@ would destroy the only unbiased measurement here.
 - `CHANGELOG.md` — release notes
 - `docs/architecture.md` — technical architecture memo
 - `docs/roadmap.md` — what to build next, with the evidence behind each item
+- `docs/implementation-plan.md` — the build plan derived from a verified research pass, including what the research could *not* establish
 - `docs/evaluation-plan.md` — metrics, corpora, known misses, benchmark plan
 - `docs/adr/` — architecture decisions, including what was rejected and why
 - `app/services/` — router, evidence packer, runtime controller, cache, orchestrator
