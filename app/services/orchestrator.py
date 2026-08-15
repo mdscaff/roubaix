@@ -73,6 +73,7 @@ class QueryOrchestrator:
             freshness_required=request.freshness_required,
             node_sets=request.node_sets,
             model=self.synthesizer.model,
+            user_id=request.user_id,
         )
         request.content_key = cache_key
         cached = self.cache.get(cache_key)

@@ -82,15 +82,22 @@ class QueryNormalizer:
         freshness_required: bool = False,
         node_sets: list[str] | None = None,
         model: str | None = None,
+        user_id: str | None = None,
         policy_version: str = POLICY_VERSION,
     ) -> str:
         """SHA-256 content address for cache lookups.
 
         Every input that can change the answer must be part of the key. Beyond
         the query text itself that means the dataset, the freshness contract,
-        the NodeSet scope, the synthesis model, and the policy version — a
-        cached answer produced under a different routing policy or a different
-        model is not a valid answer for this request.
+        the NodeSet scope, the synthesis model, the caller identity, and the
+        policy version — a cached answer produced under a different routing
+        policy, a different model, or for a different caller is not a valid
+        answer for this request.
+
+        ``user_id`` is included even though datasets are currently shared: the
+        cache is process-global, so the moment any per-caller scoping exists,
+        omitting it becomes a cross-tenant disclosure rather than a cache miss.
+        That is not a failure mode worth discovering later.
         """
         payload = "|".join(
             [
@@ -100,6 +107,7 @@ class QueryNormalizer:
                 f"fresh={int(freshness_required)}",
                 f"ns={','.join(sorted(node_sets or []))}",
                 f"model={model or ''}",
+                f"user={user_id or ''}",
             ]
         )
         return hashlib.sha256(payload.encode()).hexdigest()
