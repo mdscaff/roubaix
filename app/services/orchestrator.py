@@ -135,7 +135,11 @@ class QueryOrchestrator:
             )
             retrieval_ms += int((perf_counter() - retrieval_start) * 1000)
 
-            packed = self.evidence_packer.pack(result, evidence_budget=route.evidence_budget)
+            packed = self.evidence_packer.pack(
+                result,
+                evidence_budget=route.evidence_budget,
+                query_keywords=self.normalizer.keywords(request.query),
+            )
             decision = self.runtime_controller.decide(
                 request,
                 route,
@@ -285,6 +289,7 @@ class QueryOrchestrator:
                 "evidence_tokens": packed.token_estimate,
                 "evidence_dropped_duplicates": packed.dropped_duplicates,
                 "evidence_dropped_over_budget": packed.dropped_over_budget,
+                "best_dropped_evidentiality": packed.best_dropped_evidentiality,
                 "evidence_hashes": packed.evidence_hashes,
                 "retrieval_ms": retrieval_ms,
                 "synthesis_ms": synthesis_ms,

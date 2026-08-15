@@ -1,7 +1,7 @@
 """Evidence packing.
 
 The packer's job is to produce the *smallest* payload that still supports an
-answer. Three things it must do that truncation alone does not:
+answer. Four things it must do that truncation alone does not:
 
 1. Honour the route's evidence budget. The budget is the router's cost
    decision; ignoring it in favour of a global cap makes routing decorative.
@@ -9,6 +9,12 @@ answer. Three things it must do that truncation alone does not:
    through several paths, and duplicates are paid for twice.
 3. Bound *tokens*, not item count. Twelve items is not a budget when items
    range from 20 to 2000 characters.
+4. Cut the *least evidential* items when the budget bites, not the
+   last-retrieved ones. Items are ordered by query-term overlap before the
+   budgets apply (the ECoRAG result, adapted: optimize what is evidential,
+   not what is similar — their measured win is token reduction at
+   equal-or-better accuracy). Retrieval rank remains the tie-break, and one
+   config flag (`ROUBAIX_EVIDENTIALITY_ORDERING`) restores pure rank order.
 """
 
 from __future__ import annotations
@@ -28,6 +34,19 @@ from app.domain.models import PackedEvidence, RetrievalResult, SearchMode
 _DATE_LIKE = re.compile(r"\b(\d{4}-\d{2}(-\d{2})?|\d{4}/\d{2}/\d{2}|\d{1,2} \w+ \d{4})\b")
 
 
+def _evidentiality(item: str, query_keywords: list[str]) -> float:
+    """Query-term overlap as an evidentiality proxy, using the same stemmed
+    token matching as the sufficiency gate so packing and gating agree on what
+    counts as covered."""
+    from app.services.sufficiency import _stem
+
+    if not query_keywords:
+        return 0.0
+    tokens = {_stem(t) for t in " ".join(item.lower().split()).split()}
+    hits = sum(1 for kw in query_keywords if _stem(kw) in tokens)
+    return hits / len(query_keywords)
+
+
 def _fingerprint(item: str) -> str:
     """Stable hash of an evidence item, insensitive to whitespace and case."""
     return hashlib.sha256(" ".join(item.lower().split()).encode()).hexdigest()[:16]
@@ -40,6 +59,7 @@ class EvidencePacker:
         *,
         evidence_budget: int | None = None,
         token_budget: int | None = None,
+        query_keywords: list[str] | None = None,
     ) -> PackedEvidence:
         raw = self._extract(result)
 
@@ -65,18 +85,33 @@ class EvidencePacker:
             seen.add(digest)
             deduped.append((text, digest))
 
+        # Order by evidentiality before the budgets bite, so the cut falls on
+        # the least evidential items. Python's sort is stable, so retrieval
+        # rank is automatically the tie-break within equal scores.
+        scores: dict[str, float] = {}
+        if query_keywords and settings.evidentiality_ordering:
+            scores = {
+                digest: _evidentiality(text, query_keywords) for text, digest in deduped
+            }
+            deduped.sort(key=lambda pair: -scores.get(pair[1], 0.0))
+
         # Fill against both budgets, whichever binds first.
         items: list[str] = []
         hashes: list[str] = []
         tokens = 0
         over_budget = 0
+        best_dropped: float | None = None
         for text, digest in deduped:
             if len(items) >= max_items:
                 over_budget += 1
+                if digest in scores:
+                    best_dropped = max(best_dropped or 0.0, scores[digest])
                 continue
             cost = estimate_tokens(text)
             if items and tokens + cost > max_tokens:
                 over_budget += 1
+                if digest in scores:
+                    best_dropped = max(best_dropped or 0.0, scores[digest])
                 continue
             items.append(text)
             hashes.append(digest)
@@ -105,6 +140,7 @@ class EvidencePacker:
             token_estimate=tokens,
             dropped_duplicates=duplicates,
             dropped_over_budget=over_budget,
+            best_dropped_evidentiality=best_dropped,
             temporal_grounded=any(_DATE_LIKE.search(item) for item in items),
         )
 
