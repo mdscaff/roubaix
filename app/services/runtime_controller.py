@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.domain.models import PackedEvidence, QueryRequest, RouteDecision, SearchMode
+from app.services.sufficiency import SufficiencyGate, SufficiencyVerdict, build_gate
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,10 @@ class StopReason(StrEnum):
     MAX_RETRIES = "max_retries"
     ATTEMPT_CEILING = "attempt_ceiling"
     SYNTHESIS_FAILED = "synthesis_failed"
+    # The packed evidence set contradicts itself on the asked question.
+    # Reserved today: only an entailment-capable sufficiency tier can emit the
+    # REFUTED verdict that maps here (see app/services/sufficiency.py).
+    EVIDENCE_CONFLICT = "evidence_conflict"
     # Caller-supplied ceilings. Reaching one is a normal, expected outcome.
     LIMIT_LATENCY = "limit_latency"
     LIMIT_COST = "limit_cost"
@@ -118,6 +123,7 @@ class RuntimeController:
         allow_stub_evidence: bool | None = None,
         strict_freshness: bool | None = None,
         on_check_error: CheckErrorPolicy = CheckErrorPolicy.DENY,
+        sufficiency_gate: SufficiencyGate | None = None,
     ) -> None:
         self._allow_stub = (
             settings.allow_stub_evidence if allow_stub_evidence is None else allow_stub_evidence
@@ -126,6 +132,7 @@ class RuntimeController:
             settings.strict_freshness if strict_freshness is None else strict_freshness
         )
         self._on_check_error = on_check_error
+        self._sufficiency = sufficiency_gate or build_gate()
 
     def decide(
         self,
@@ -240,13 +247,41 @@ class RuntimeController:
                 signals=["limit_latency"],
             )
 
-        # 4. Empty or thin evidence relative to the budget the router asked for.
+        # 4. Set-level sufficiency. This is the check the count/token heuristic
+        #    below cannot make: twelve on-budget items about the wrong entity
+        #    pass every volume test and still cannot answer the question. The
+        #    gate judges the packed set as a whole (a per-item score cannot
+        #    observe a missing bridge item), and the volume heuristic remains
+        #    as the floor beneath it.
+        sufficiency = self._sufficiency.check(request, packed)
+        if sufficiency.verdict is SufficiencyVerdict.REFUTED:
+            return ControlDecision(
+                action=ControlAction.FAIL_CLOSED,
+                reason="evidence_set_self_contradictory",
+                stop_reason=StopReason.EVIDENCE_CONFLICT,
+                signals=sufficiency.as_signals(),
+            )
+
+        # 5. Empty, thin, or insufficient evidence relative to what the query
+        #    needs. All three take the same widen -> escalate -> stop path;
+        #    the shortfall string records which one fired.
         threshold = max(1, math.ceil(route.evidence_budget * MIN_EVIDENCE_RATIO))
         token_floor = int(settings.evidence_token_budget * MIN_EVIDENCE_TOKENS_RATIO)
         count = len(packed.evidence_items)
-        is_thin = count < threshold and packed.token_estimate < token_floor
-        if count == 0 or is_thin:
-            shortfall = "empty_evidence" if count == 0 else f"thin_evidence_{count}_of_{threshold}"
+        is_thin = (
+            count < threshold
+            and packed.token_estimate < token_floor
+            # A set the gate judged sufficient is an answer, however small.
+            and sufficiency.verdict is not SufficiencyVerdict.SUFFICIENT
+        )
+        insufficient_set = sufficiency.verdict is SufficiencyVerdict.INSUFFICIENT
+        if count == 0 or is_thin or insufficient_set:
+            if count == 0:
+                shortfall = "empty_evidence"
+            elif insufficient_set:
+                shortfall = f"insufficient_set_coverage_{sufficiency.coverage:.2f}"
+            else:
+                shortfall = f"thin_evidence_{count}_of_{threshold}"
             if retry_count >= settings.max_retries:
                 return ControlDecision(
                     action=ControlAction.FAIL_CLOSED if count == 0 else ControlAction.ACCEPT,
@@ -258,7 +293,7 @@ class RuntimeController:
                     stop_reason=(
                         StopReason.MAX_RETRIES if count == 0 else StopReason.THIN_EVIDENCE_ACCEPTED
                     ),
-                    signals=[shortfall, "retry_limit"],
+                    signals=[shortfall, "retry_limit", *sufficiency.as_signals()],
                 )
             # Cheapest rung first: widen the current mode's budget before
             # buying a more expensive mode. Only once per mode, so this cannot
@@ -268,7 +303,7 @@ class RuntimeController:
                     action=ControlAction.WIDEN,
                     reason=f"{shortfall}_widen_{route.mode.value}",
                     stop_reason=None,  # not a stop: the loop continues
-                    signals=[shortfall, "widen"],
+                    signals=[shortfall, "widen", *sufficiency.as_signals()],
                     next_route=route.model_copy(
                         update={
                             "evidence_budget": settings.max_evidence_items,
@@ -291,7 +326,7 @@ class RuntimeController:
                         if count == 0
                         else StopReason.THIN_EVIDENCE_ACCEPTED
                     ),
-                    signals=[shortfall, "ladder_exhausted"],
+                    signals=[shortfall, "ladder_exhausted", *sufficiency.as_signals()],
                 )
             return self._escalate_to(
                 nxt,
@@ -304,6 +339,7 @@ class RuntimeController:
             action=ControlAction.ACCEPT,
             reason="sufficient_evidence",
             stop_reason=StopReason.SUFFICIENT_EVIDENCE,
+            signals=sufficiency.as_signals(),
         )
 
     @staticmethod

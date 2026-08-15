@@ -27,13 +27,37 @@ def _controller() -> RuntimeController:
     return RuntimeController(allow_stub_evidence=True)
 
 
+# Fixtures use query-relevant evidence deliberately: the controller now checks
+# what the evidence is ABOUT (set-level sufficiency), not just how much of it
+# there is. Toy fixtures like items=["a","b"] against query "q" are correctly
+# flagged off-topic — which is the exact failure the count heuristic missed.
+
+
 def test_accepts_when_evidence_meets_budget() -> None:
     route = RouteDecision(mode=SearchMode.CHUNKS, rationale="test", evidence_budget=8)
     decision = _controller().decide(
-        QueryRequest(query="q"), route, _packed(items=["a", "b"]), retry_count=0
+        QueryRequest(query="what port does billing expose"),
+        route,
+        _packed(items=["billing exposes port 8443", "the billing port is internal"]),
+        retry_count=0,
     )
     assert decision.action is ControlAction.ACCEPT
     assert decision.next_route is None
+    assert "sufficiency.sufficient" in decision.signals
+
+
+def test_off_topic_evidence_is_insufficient_even_when_plentiful() -> None:
+    """The check the volume heuristic could never make: twelve on-budget items
+    about the wrong entity pass every count/token test."""
+    route = RouteDecision(mode=SearchMode.CHUNKS, rationale="test", evidence_budget=8)
+    decision = _controller().decide(
+        QueryRequest(query="what port does billing expose"),
+        route,
+        _packed(items=[f"the weather in Ghent on day {i} was mild" for i in range(12)]),
+        retry_count=0,
+    )
+    assert decision.action is not ControlAction.ACCEPT
+    assert "insufficient_set" in decision.reason
 
 
 def test_widens_the_same_mode_before_paying_for_a_more_expensive_one() -> None:
@@ -58,13 +82,34 @@ def test_escalates_when_evidence_empty_and_widening_already_tried() -> None:
 
 
 def test_escalates_on_thin_evidence_relative_to_budget() -> None:
-    """One item against a budget of eight is a retrieval miss, not concision."""
+    """One tiny partially-relevant item against a budget of eight is a miss.
+
+    The fixture covers 1 of 4 query terms — inside the UNCERTAIN band, so the
+    volume floor (not the sufficiency verdict) is what fires. A fully-covering
+    item would be accepted however small: sufficiency outranks thinness.
+    """
     route = RouteDecision(mode=SearchMode.CHUNKS, rationale="test", evidence_budget=8)
     decision = _controller().decide(
-        QueryRequest(query="q"), route, _packed(items=["a"]), retry_count=0, widened=True
+        QueryRequest(query="billing warehouse port timeout"),
+        route,
+        _packed(items=["billing mentioned"]),
+        retry_count=0,
+        widened=True,
     )
     assert decision.action is ControlAction.ESCALATE
     assert "thin_evidence" in decision.reason
+
+
+def test_a_sufficient_set_is_an_answer_however_small() -> None:
+    """Regression guard on the design choice: sufficiency outranks thinness."""
+    route = RouteDecision(mode=SearchMode.CHUNKS, rationale="test", evidence_budget=8)
+    decision = _controller().decide(
+        QueryRequest(query="what port does billing expose"),
+        route,
+        _packed(items=["billing exposes port 8443"]),
+        retry_count=0,
+    )
+    assert decision.action is ControlAction.ACCEPT
 
 
 def test_fail_closed_after_max_retries() -> None:
@@ -171,7 +216,7 @@ def test_accepts_freshness_when_evidence_is_dated() -> None:
     packed.temporal_grounded = True
     packed.token_estimate = 500
     decision = RuntimeController(allow_stub_evidence=True, strict_freshness=True).decide(
-        QueryRequest(query="q", freshness_required=True), route, packed, retry_count=0
+        QueryRequest(query="rollout stage", freshness_required=True), route, packed, retry_count=0
     )
     assert decision.action is ControlAction.ACCEPT
 

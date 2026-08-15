@@ -37,7 +37,9 @@ class FakeCogneeClient(CogneeClient):
         return RetrievalResult(
             mode=mode,
             evidence=RetrievalEvidence(
-                chunks=[f"chunk {i} for {dataset}" for i in range(4)],
+                # Chunks echo the query so the set-level sufficiency gate sees
+                # full coverage — these tests are about the cache, not the gate.
+                chunks=[f"{query} — answer detail {i} for {dataset}" for i in range(4)],
                 triplets=[
                     {"subject": "A", "predicate": "rel", "object": f"B{i}"} for i in range(4)
                 ],

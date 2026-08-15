@@ -47,6 +47,12 @@ demo = [
   "playwright>=1.62.0",
   "edge-tts>=7.2.8",
 ]
+verify = [
+  # Tier-1 sufficiency scorer: MiniCheck-FT5, a 770M encoder with GPT-4-level
+  # fact-checking accuracy at ~400x lower cost (EMNLP 2024). Heavy (pulls
+  # torch); the gate runs Tier-0-only without it.
+  "minicheck>=0.1.2",
+]
 eval = [
   # v4 is a breaking change: it is OpenTelemetry-based and removed
   # Langfuse.start_span in favour of start_as_current_observation. The floor is
