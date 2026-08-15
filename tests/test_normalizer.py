@@ -6,19 +6,25 @@ def test_normalize_lowercases_and_strips() -> None:
     assert n.normalize("  Hello World  ") == "hello world"
 
 
-def test_normalize_removes_stop_words() -> None:
+def test_normalize_preserves_word_order_and_stop_words() -> None:
+    """The canonical form feeds both cache keys and router phrase matching.
+
+    Stripping stop words or sorting tokens breaks both: multi-word patterns
+    ("depends on", "how are ... organized") become unmatchable, and inverted
+    relationships collapse onto one cache key.
+    """
     n = QueryNormalizer()
-    result = n.normalize("What is the latest status of the rollout?")
-    assert "the" not in result.split()
-    assert "is" not in result.split()
-    assert "of" not in result.split()
+    assert n.normalize("What services depend on the auth gateway?") == (
+        "what services depend on the auth gateway"
+    )
 
 
-def test_normalize_sorts_keywords() -> None:
+def test_normalize_does_not_collapse_inverted_relationships() -> None:
+    """Regression: these are different questions with different answers."""
     n = QueryNormalizer()
-    a = n.normalize("How are service A and service B related?")
-    b = n.normalize("service B and service A related how are?")
-    assert a == b
+    assert n.normalize("does billing depend on the warehouse") != n.normalize(
+        "does the warehouse depend on billing"
+    )
 
 
 def test_normalize_strips_punctuation() -> None:
@@ -36,26 +42,70 @@ def test_normalize_identical_queries_same_output() -> None:
     assert n.normalize(q1) == n.normalize(q2)
 
 
+def test_keywords_strip_stop_words_but_keep_order() -> None:
+    n = QueryNormalizer()
+    assert n.keywords("What is the latest status of the rollout?") == [
+        "latest",
+        "status",
+        "rollout",
+    ]
+
+
+def test_fingerprint_is_order_insensitive() -> None:
+    n = QueryNormalizer()
+    a = n.fingerprint("How are service A and service B related?")
+    b = n.fingerprint("service B and service A related how are?")
+    assert a == b
+
+
 def test_content_key_deterministic() -> None:
     n = QueryNormalizer()
     nq = n.normalize("test query")
-    key1 = n.content_key(nq, "default")
-    key2 = n.content_key(nq, "default")
-    assert key1 == key2
-    assert len(key1) == 64  # SHA-256 hex
+    assert n.content_key(nq, "default") == n.content_key(nq, "default")
+    assert len(n.content_key(nq, "default")) == 64  # SHA-256 hex
 
 
 def test_content_key_varies_by_dataset() -> None:
     n = QueryNormalizer()
     nq = n.normalize("test query")
-    k1 = n.content_key(nq, "dataset_a")
-    k2 = n.content_key(nq, "dataset_b")
-    assert k1 != k2
+    assert n.content_key(nq, "dataset_a") != n.content_key(nq, "dataset_b")
 
 
-def test_content_key_varies_by_mode() -> None:
+def test_content_key_varies_by_freshness_contract() -> None:
+    """A cached non-fresh answer must not satisfy a request demanding freshness."""
     n = QueryNormalizer()
     nq = n.normalize("test query")
-    k1 = n.content_key(nq, "default", mode="CHUNKS")
-    k2 = n.content_key(nq, "default", mode="TEMPORAL")
-    assert k1 != k2
+    assert n.content_key(nq, "default", freshness_required=False) != n.content_key(
+        nq, "default", freshness_required=True
+    )
+
+
+def test_content_key_varies_by_node_set_scope() -> None:
+    n = QueryNormalizer()
+    nq = n.normalize("test query")
+    assert n.content_key(nq, "default", node_sets=["billing"]) != n.content_key(
+        nq, "default", node_sets=["auth"]
+    )
+
+
+def test_content_key_node_set_order_does_not_matter() -> None:
+    n = QueryNormalizer()
+    nq = n.normalize("test query")
+    assert n.content_key(nq, "default", node_sets=["a", "b"]) == n.content_key(
+        nq, "default", node_sets=["b", "a"]
+    )
+
+
+def test_content_key_varies_by_model() -> None:
+    n = QueryNormalizer()
+    nq = n.normalize("test query")
+    assert n.content_key(nq, "default", model="m1") != n.content_key(nq, "default", model="m2")
+
+
+def test_content_key_varies_by_policy_version() -> None:
+    """A routing/prompt policy change must invalidate previously cached answers."""
+    n = QueryNormalizer()
+    nq = n.normalize("test query")
+    assert n.content_key(nq, "default", policy_version="1") != n.content_key(
+        nq, "default", policy_version="2"
+    )

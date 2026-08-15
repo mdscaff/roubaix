@@ -382,12 +382,16 @@
         }
       });
     } else {
-      fetchAnswer().catch(() => {
+      // If the API is unreachable during a recording, say so. This previously
+      // substituted invented timings (42ms / 118ms / 180ms) and a route mode
+      // the router could not emit, and that fabricated payload is what got
+      // filmed into the demo video. A demo that shows made-up numbers when the
+      // system is down is worse than a demo that shows nothing.
+      fetchAnswer().catch((err) => {
         cachedAnswerJson = JSON.stringify({
-          answer: "Roubaix response using mode=GRAPH_COMPLETION.",
-          accepted: true,
-          route: { mode: "GRAPH_COMPLETION", rationale: "relationship query" },
-          telemetry: { retrieval_ms: 42, synthesis_ms: 118, total_ms: 180, evidence_items: 3 },
+          error: "API unreachable — no live response to display.",
+          detail: String(err),
+          note: "Telemetry is only ever shown from a real POST /answer response.",
         }, null, 2);
       });
     }

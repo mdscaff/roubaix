@@ -9,3 +9,4 @@ __pycache__/
 .DS_Store
 dist/
 evals/runs/
+artifacts/gepa_log/

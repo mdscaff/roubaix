@@ -18,9 +18,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from app.evals.baselines import Baseline  # noqa: E402
-from app.evals.report import generate_report  # noqa: E402
-from app.evals.runner import run_eval  # noqa: E402
+from app.evals.baselines import Baseline
+from app.evals.report import generate_report
+from app.evals.runner import run_eval
 
 
 def _parse_baselines(raw: str | None) -> list[Baseline] | None:

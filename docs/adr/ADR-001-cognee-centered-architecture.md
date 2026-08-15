@@ -10,7 +10,7 @@ We need a graph-aware retrieval system that improves cost, quality, and freshnes
 Use Cognee as the retrieval substrate and add:
 
 - DSPy + GEPA for offline optimization
-- AdalFlow for runtime control
+- AdalFlow for runtime control *(superseded: see [ADR-003](ADR-003-reject-adalflow-keep-explicit-controller.md) — AdalFlow was evaluated and rejected; runtime control is an explicit in-repo controller)*
 
 ## Consequences
 

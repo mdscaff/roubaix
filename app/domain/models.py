@@ -1,10 +1,10 @@
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class SearchMode(str, Enum):
+class SearchMode(StrEnum):
     CHUNKS = "CHUNKS"
     RAG_COMPLETION = "RAG_COMPLETION"
     TRIPLET_COMPLETION = "TRIPLET_COMPLETION"
@@ -19,6 +19,11 @@ class QueryRequest(BaseModel):
     query: str
     user_id: str | None = None
     dataset: str | None = None
+    node_sets: list[str] = Field(
+        default_factory=list,
+        description="Caller-supplied NodeSet scope. Narrowing the graph is the "
+        "cheapest available cost lever, so it is part of the request contract.",
+    )
     freshness_required: bool = False
     max_latency_ms: int | None = None
     max_cost_cents: float | None = None
@@ -32,6 +37,21 @@ class RouteDecision(BaseModel):
     evidence_budget: int = 8
     requires_freshness_validation: bool = False
     rationale: str
+    signals: list[str] = Field(
+        default_factory=list,
+        description="Named patterns that fired for this decision. Recorded so a "
+        "route can be explained and replayed rather than argued about.",
+    )
+    scores: dict[str, float] = Field(
+        default_factory=dict,
+        description="Per-mode score from the rule engine, for tie-break auditing.",
+    )
+    confident: bool = Field(
+        default=True,
+        description="False when the winning mode only narrowly beat its runner-up. "
+        "A narrow win is the signal that a learned router should take over, and "
+        "the signal that the runtime controller should escalate more readily.",
+    )
 
 
 class RetrievalEvidence(BaseModel):
@@ -47,6 +67,13 @@ class RetrievalResult(BaseModel):
     mode: SearchMode
     evidence: RetrievalEvidence
     retrieval_stats: dict[str, Any] = Field(default_factory=dict)
+    degraded: bool = Field(
+        default=False,
+        description="True when this evidence did NOT come from the live retrieval "
+        "substrate (SDK unavailable, search failed, stub fallback). Degraded "
+        "evidence must never be synthesized into a confident answer or cached.",
+    )
+    degraded_reason: str | None = None
 
 
 class PackedEvidence(BaseModel):
@@ -55,6 +82,17 @@ class PackedEvidence(BaseModel):
     evidence_items: list[str] = Field(default_factory=list)
     evidence_hashes: list[str] = Field(default_factory=list)
     provenance: list[dict[str, Any]] = Field(default_factory=list)
+    degraded: bool = False
+    degraded_reason: str | None = None
+    token_estimate: int = 0
+    dropped_duplicates: int = 0
+    dropped_over_budget: int = 0
+    temporal_grounded: bool = Field(
+        default=False,
+        description="True when at least one packed item carries a parseable date. "
+        "A freshness claim that cannot point at a timestamp is not a freshness "
+        "claim, so this is what the controller validates against.",
+    )
 
 
 class AnswerResult(BaseModel):
@@ -96,6 +134,25 @@ class SynthesisResult(BaseModel):
 
     answer: str
     input_tokens_estimate: int = 0
+    usage_measured: bool = Field(
+        default=False,
+        description="True when input_tokens_estimate came from the provider's "
+        "reported usage rather than a local heuristic. Cost reporting must not "
+        "present an estimate as a measurement.",
+    )
+    failed: bool = Field(
+        default=False,
+        description="True when the LLM call failed and `answer` is a placeholder "
+        "rather than a synthesized answer. A placeholder that reads like an "
+        "answer must never be returned as an accepted one.",
+    )
+    failure_reason: str | None = None
+    unsynthesized: bool = Field(
+        default=False,
+        description="True when no LLM was configured, so `answer` is a local "
+        "template. Distinct from `failed`: this is expected in CI and local dev, "
+        "not a provider outage.",
+    )
 
 
 class OutcomeRecord(BaseModel):

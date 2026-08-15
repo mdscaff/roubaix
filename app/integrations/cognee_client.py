@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -34,30 +35,65 @@ class CogneeClient:
         top_k = evidence_budget or settings.max_evidence_items
         if self._use_live_search():
             try:
-                return await self._live_search(
-                    query=query,
-                    mode=mode,
-                    dataset=dataset,
-                    node_sets=node_sets,
-                    top_k=top_k,
+                return await asyncio.wait_for(
+                    self._live_search(
+                        query=query,
+                        mode=mode,
+                        dataset=dataset,
+                        node_sets=node_sets,
+                        top_k=top_k,
+                    ),
+                    timeout=settings.retrieval_timeout_s,
                 )
-            except Exception as exc:
+            except TimeoutError:
+                logger.warning(
+                    "cognee_search_timeout",
+                    extra={
+                        "mode": mode.value,
+                        "dataset": dataset,
+                        "timeout_s": settings.retrieval_timeout_s,
+                    },
+                )
+                return self._placeholder_search(
+                    query,
+                    mode,
+                    dataset,
+                    node_sets,
+                    reason=f"retrieval_timeout_after_{settings.retrieval_timeout_s}s",
+                )
+            except Exception as exc:  # noqa: BLE001 - substrate boundary; failure is flagged degraded
                 logger.warning(
                     "cognee_search_failed",
                     extra={"mode": mode.value, "dataset": dataset, "error": str(exc)},
                 )
-        return self._placeholder_search(query, mode, dataset, node_sets)
+                return self._placeholder_search(
+                    query,
+                    mode,
+                    dataset,
+                    node_sets,
+                    reason=f"live_search_failed: {type(exc).__name__}",
+                )
+        return self._placeholder_search(
+            query, mode, dataset, node_sets, reason="cognee_not_configured"
+        )
 
-    async def ingest(self, content: str, dataset: str, node_sets: list[str] | None = None) -> dict[str, Any]:
+    async def ingest(
+        self, content: str, dataset: str, node_sets: list[str] | None = None
+    ) -> dict[str, Any]:
         if self._use_live_search():
             try:
                 return await self._live_ingest(content, dataset, node_sets)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - substrate boundary; failure is flagged degraded
                 logger.warning(
                     "cognee_ingest_failed",
                     extra={"dataset": dataset, "error": str(exc)},
                 )
-        return {"status": "accepted", "dataset": dataset, "node_sets": node_sets or [], "stub": True}
+        return {
+            "status": "accepted",
+            "dataset": dataset,
+            "node_sets": node_sets or [],
+            "stub": True,
+        }
 
     def _use_live_search(self) -> bool:
         status = get_cognee_status()
@@ -102,7 +138,9 @@ class CogneeClient:
             },
         )
 
-    async def _live_ingest(self, content: str, dataset: str, node_sets: list[str] | None) -> dict[str, Any]:
+    async def _live_ingest(
+        self, content: str, dataset: str, node_sets: list[str] | None
+    ) -> dict[str, Any]:
         import cognee  # type: ignore[import-not-found]
 
         add_kwargs: dict[str, Any] = {"dataset_name": dataset}
@@ -110,7 +148,12 @@ class CogneeClient:
             add_kwargs["node_set"] = node_sets
         await cognee.add(content, **add_kwargs)
         await cognee.cognify(datasets=[dataset])
-        return {"status": "accepted", "dataset": dataset, "node_sets": node_sets or [], "live": True}
+        return {
+            "status": "accepted",
+            "dataset": dataset,
+            "node_sets": node_sets or [],
+            "live": True,
+        }
 
     @staticmethod
     def _placeholder_search(
@@ -118,7 +161,18 @@ class CogneeClient:
         mode: SearchMode,
         dataset: str,
         node_sets: list[str] | None,
+        *,
+        reason: str = "cognee_not_configured",
     ) -> RetrievalResult:
+        """Deterministic stub evidence for CI and unconfigured environments.
+
+        This content is fabricated. It is flagged ``degraded`` all the way to
+        the runtime controller, which refuses to synthesize a confident answer
+        from it unless ``ROUBAIX_ALLOW_STUB_EVIDENCE`` is set. Silently
+        answering from stub data was the single worst failure mode here: a
+        transient Cognee outage produced fluent, cached, entirely invented
+        answers that were indistinguishable from grounded ones.
+        """
         evidence = RetrievalEvidence(
             triplets=[{"subject": "A", "predicate": "related_to", "object": "B"}]
             if mode == SearchMode.TRIPLET_COMPLETION
@@ -129,8 +183,16 @@ class CogneeClient:
             graph_paths=[{"path": ["A", "B", "C"]}]
             if mode in {SearchMode.GRAPH_COMPLETION, SearchMode.GRAPH_SUMMARY_COMPLETION}
             else [],
-            rows=[{"key": "value"}] if mode in {SearchMode.CYPHER, SearchMode.NATURAL_LANGUAGE} else [],
+            rows=[{"key": "value"}]
+            if mode in {SearchMode.CYPHER, SearchMode.NATURAL_LANGUAGE}
+            else [],
             timestamps=["2026-04-12"] if mode == SearchMode.TEMPORAL else [],
             provenance=[{"dataset": dataset, "node_sets": node_sets or [], "stub": True}],
         )
-        return RetrievalResult(mode=mode, evidence=evidence, retrieval_stats={"dataset": dataset, "stub": True})
+        return RetrievalResult(
+            mode=mode,
+            evidence=evidence,
+            retrieval_stats={"dataset": dataset, "stub": True, "reason": reason},
+            degraded=True,
+            degraded_reason=reason,
+        )

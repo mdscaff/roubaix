@@ -38,6 +38,25 @@ class Settings(BaseSettings):
     max_retries: int = Field(default=2, alias="ROUBAIX_MAX_RETRIES")
     enable_temporal: bool = Field(default=True, alias="ROUBAIX_ENABLE_TEMPORAL")
 
+    # Evidence packing. The token budget is the real cost lever: item count
+    # alone does not bound prompt size when items vary from 20 to 2000 chars.
+    evidence_token_budget: int = Field(default=1200, alias="ROUBAIX_EVIDENCE_TOKEN_BUDGET")
+
+    # Timeouts. An agent harness without them converts a slow dependency into
+    # an unbounded request.
+    retrieval_timeout_s: float = Field(default=20.0, alias="ROUBAIX_RETRIEVAL_TIMEOUT_S")
+    synthesis_timeout_s: float = Field(default=60.0, alias="ROUBAIX_SYNTHESIS_TIMEOUT_S")
+
+    # When false (the default), the runtime controller fails closed rather than
+    # answering from stub/fallback evidence. CI sets this true so the suite can
+    # exercise the pipeline without a live Cognee instance.
+    allow_stub_evidence: bool = Field(default=False, alias="ROUBAIX_ALLOW_STUB_EVIDENCE")
+
+    # When true, a freshness-required query must return evidence carrying a
+    # parseable date. Without this the freshness contract is satisfied by any
+    # non-empty result, which is how stale answers pass a freshness gate.
+    strict_freshness: bool = Field(default=True, alias="ROUBAIX_STRICT_FRESHNESS")
+
     # Cache settings (inspired by HyperSpace Content Store)
     cache_max_size: int = Field(default=4096, alias="ROUBAIX_CACHE_MAX_SIZE")
     cache_default_ttl_s: float = Field(default=3600.0, alias="ROUBAIX_CACHE_DEFAULT_TTL_S")

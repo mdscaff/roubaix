@@ -3,22 +3,26 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Iterable
 
 from app.domain.models import AnswerResult, QueryRequest
-from app.evals.baselines import Baseline, create_orchestrator
+from app.evals.baselines import DEFAULT_BASELINES, Baseline, create_orchestrator
 from app.evals.models import EvalQuery, EvalSummary
-from app.evals.report import compute_acceptance_gates, summarize_baseline
+from app.evals.report import (
+    collect_validity_warnings,
+    compute_acceptance_gates,
+    summarize_baseline,
+)
 from app.observability.eval_trace import EvalRunContext, EvalTrace, eval_run_context
 
 
 def load_corpus(path: Path) -> list[EvalQuery]:
     queries: list[EvalQuery] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
         if not line or line.startswith("#"):
             continue
         queries.append(EvalQuery.model_validate_json(line))
@@ -59,6 +63,25 @@ def _trace_from_answer(
         accepted=result.accepted,
         pggraph_extension=telemetry.get("pggraph_extension"),
         answer=result.answer,
+        extra={
+            key: telemetry.get(key)
+            for key in (
+                "degraded",
+                "degraded_reason",
+                "unsynthesized",
+                "cost_is_estimate",
+                "cost_model",
+                "route_signals",
+                "route_confident",
+                "escalation_chain",
+                "attempted_modes",
+                "widened",
+                "temporal_grounded",
+                "evidence_tokens",
+                "budget_downgrade",
+            )
+            if key in telemetry
+        },
     )
 
 
@@ -76,7 +99,7 @@ async def run_eval(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     corpus = load_corpus(corpus_path)
-    selected = list(baselines or Baseline)
+    selected = list(baselines or DEFAULT_BASELINES)
     traces: list[EvalTrace] = []
 
     for baseline in selected:
@@ -128,6 +151,7 @@ async def run_eval(
         finished_at=finished_at.isoformat(),
         baseline_stats=baseline_stats,
         acceptance_gates=compute_acceptance_gates(baseline_stats),
+        validity_warnings=collect_validity_warnings(baseline_stats),
     )
     summary_path = output_dir / "summary.json"
     summary_path.write_text(json.dumps(summary.model_dump(), indent=2), encoding="utf-8")

@@ -1,0 +1,26 @@
+{"query_id": "ho-fact-001", "bucket": "local_factual", "query": "What is the retry limit for the payment worker?", "expected_mode": "CHUNKS"}
+{"query_id": "ho-fact-002", "bucket": "local_factual", "query": "How much memory does the search indexer request?", "expected_mode": "CHUNKS"}
+{"query_id": "ho-fact-003", "bucket": "local_factual", "query": "What format does the audit log use?", "expected_mode": "CHUNKS"}
+{"query_id": "ho-fact-004", "bucket": "local_factual", "query": "Which port is reserved for the internal metrics endpoint?", "expected_mode": "CHUNKS"}
+{"query_id": "ho-rel-001", "bucket": "relationship-heavy", "query": "Which team owns the notification service?", "expected_mode": "TRIPLET_COMPLETION"}
+{"query_id": "ho-rel-002", "bucket": "relationship-heavy", "query": "What is the relationship between the scheduler and the job queue?", "expected_mode": "TRIPLET_COMPLETION"}
+{"query_id": "ho-rel-003", "bucket": "relationship-heavy", "query": "Is the reporting service linked to the customer database?", "expected_mode": "TRIPLET_COMPLETION"}
+{"query_id": "ho-rel-004", "bucket": "relationship-heavy", "query": "Which upstream services call the identity provider?", "expected_mode": "TRIPLET_COMPLETION", "notes": "Hard case: reads as one hop, but 'upstream' is also a multi-hop cue."}
+{"query_id": "ho-multi-001", "bucket": "multi-hop", "query": "If the identity provider goes down, what stops working?", "expected_mode": "GRAPH_COMPLETION"}
+{"query_id": "ho-multi-002", "bucket": "multi-hop", "query": "What is the full path from a checkout request to the ledger?", "expected_mode": "GRAPH_COMPLETION"}
+{"query_id": "ho-multi-003", "bucket": "multi-hop", "query": "Show everything transitively dependent on the shared config service.", "expected_mode": "GRAPH_COMPLETION"}
+{"query_id": "ho-multi-004", "bucket": "multi-hop", "query": "Which teams would be impacted by deprecating the v1 API?", "expected_mode": "GRAPH_COMPLETION"}
+{"query_id": "ho-summary-001", "bucket": "broad_summary", "query": "Give me a high level picture of the payments domain.", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}
+{"query_id": "ho-summary-002", "bucket": "broad_summary", "query": "Summarise what our observability stack does.", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}
+{"query_id": "ho-summary-003", "bucket": "broad_summary", "query": "How is the platform team's ownership structured?", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}
+{"query_id": "ho-summary-004", "bucket": "broad_summary", "query": "Explain how a request travels through the edge layer.", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}
+{"query_id": "ho-struct-001", "bucket": "structural_graph", "query": "Cypher: list services with no outgoing edges.", "expected_mode": "CYPHER"}
+{"query_id": "ho-struct-002", "bucket": "structural_graph", "query": "How many nodes are in the billing subgraph?", "expected_mode": "CYPHER"}
+{"query_id": "ho-struct-003", "bucket": "structural_graph", "query": "Match every service annotated as tier one.", "expected_mode": "CYPHER"}
+{"query_id": "ho-struct-004", "bucket": "structural_graph", "query": "Find all edges of type owns between teams and services.", "expected_mode": "CYPHER"}
+{"query_id": "ho-temp-001", "bucket": "time_sensitive", "query": "What deployments happened in the past week?", "expected_mode": "TEMPORAL"}
+{"query_id": "ho-temp-002", "bucket": "time_sensitive", "query": "Is the checkout outage still ongoing right now?", "expected_mode": "TEMPORAL"}
+{"query_id": "ho-temp-003", "bucket": "time_sensitive", "query": "Give me the most recent schema migration.", "expected_mode": "TEMPORAL"}
+{"query_id": "ho-temp-004", "bucket": "time_sensitive", "query": "What has changed since the last release?", "expected_mode": "TEMPORAL"}
+{"query_id": "ho-ambig-001", "bucket": "ambiguous", "query": "Tell me about payments.", "expected_mode": "CHUNKS"}
+{"query_id": "ho-ambig-002", "bucket": "ambiguous", "query": "Anything I should know?", "expected_mode": "CHUNKS"}

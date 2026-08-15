@@ -8,4 +8,4 @@ Phase one is now wired end to end. Cognee retrieval runs through a live SDK path
 
 On this page, watch a live call into POST slash answer. The JSON response shows which mode was selected, how long retrieval and synthesis took, and whether the cache was hit—transparency you can benchmark, not just claim.
 
-DSPy and GEPA optimization and AdalFlow-style runtime control remain on the roadmap. Thank you for watching Roubaix.
+GEPA compilation of the ambiguous-band router remains on the roadmap. Thank you for watching Roubaix.

@@ -18,7 +18,7 @@ Roubaix is a technical experiment, not a demo. The audience is skeptical and det
 
 - Read `README.md` and `docs/architecture.md` first.
 - When implementing, inspect adjacent files before editing.
-- Prefer making a baseline version work before adding DSPy/GEPA or AdalFlow sophistication.
+- Prefer making a baseline version work before adding DSPy/GEPA sophistication.
 - Leave concise implementation notes where future optimization will matter.
 
 ## Coding conventions
