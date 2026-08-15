@@ -61,8 +61,10 @@ class NodeSetIndex:
             # as declared. A set literal here made the matched-alias signal
             # vary per process (set iteration order), which a flaky test
             # caught — nondeterministic telemetry is unreplayable telemetry.
-            seen: set[str] = set()
-            ordered = [a for a in (nodeset, *aliases) if not (a in seen or seen.add(a))]
+            ordered: list[str] = []
+            for candidate in (nodeset, *aliases):
+                if candidate not in ordered:
+                    ordered.append(candidate)
             for alias in ordered:
                 tokens = frozenset(
                     _stem(t) for t in self.normalizer.normalize(alias).split() if t
