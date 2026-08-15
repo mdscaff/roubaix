@@ -21,15 +21,17 @@ Most RAG systems have one retrieval path and stuff everything into context. Roub
 ### 1. Cognee — the retrieval substrate
 **Why:** Cognee provides a unified SearchMode abstraction (CHUNKS, TRIPLET_COMPLETION, GRAPH_COMPLETION, GRAPH_SUMMARY_COMPLETION, CYPHER, NATURAL_LANGUAGE, TEMPORAL) over graph + vector memory. Roubaix doesn't want to build its own retrieval layer — it wants to **exploit the fact that different retrieval modes have radically different costs** and route intelligently between them. ADR-001 locks this in: Cognee owns retrieval.
 
-### 2. DSPy + GEPA — offline optimization (stubbed, not yet wired)
-**Why:** The deterministic keyword router is a baseline. Once evaluation data exists, DSPy programs will replace hand-tuned heuristics for route classification, NodeSet selection, and evidence budget. GEPA compiles those programs. Critically, this is **offline** work — it does not add runtime dependencies.
+### 2. DSPy + GEPA — offline optimization of the ambiguous band
+**Why:** The deterministic scored router is measured at 85% held-out against 23% for the best single fixed mode, so it is not something to replace — it is something to *supplement*. The errors concentrate: on the held-out corpus the confident band is 93% accurate and the unconfident band is 73%, holding 3 of 4 misses in 42% of traffic. A GEPA-compiled DSPy program therefore runs **only when the deterministic stage reports low confidence**, leaving the majority of queries on a free, deterministic path. Compilation is offline; the compiled artifact is plain-text JSON checked into git. Any failure degrades to the deterministic decision.
 
-### 3. AdalFlow — runtime control (stubbed)
-**Why:** Progressive escalation, confidence checks, freshness validation. Starts as a local `RuntimeController` baseline so the system works end-to-end before adding sophistication.
+Note that GEPA optimizes instruction *text* by reflecting on observed failures — it is not a numeric hyperparameter search, so the rule weights are hand-tuned and measured rather than optimizer output.
+
+### 3. An explicit runtime controller — not a framework
+**Why:** Progressive escalation, freshness validation, and fail-closed refusal are ~200 lines of dependency-free Python whose termination is provable by inspection. AdalFlow was evaluated and rejected (ADR-003); the Strands Agents SDK was evaluated, its patterns adopted and its dependency refused (ADR-004).
 
 ### 4. HyperSpace AGI architect-v1 patterns — the tiered resolution pipeline
 **Why:** HyperSpace's four-layer resolution (Normalize → Content Store → Similarity → Full Resolution) is the single most transferable idea in the LLM-agent space. Roubaix adopts:
-- `QueryNormalizer` — canonical form via lowercase, stop-word removal, keyword sort, SHA-256 content addressing
+- `QueryNormalizer` — order-preserving canonical form plus SHA-256 content addressing (sorting the keywords, as an earlier version did, collapsed inverted relationships onto one cache key)
 - `ContentAddressedCache` — OrderedDict-based LRU with configurable TTL, plus a **shorter TTL for freshness-sensitive routes** (the `requires_freshness_validation` flag on RouteDecision drives this automatically)
 - MinHash similarity index (Phase 2), TaskDag decomposition (Phase 4)
 
@@ -87,7 +89,7 @@ This is not theoretical — it matches how LLM-era systems actually behave. Each
 This split is not a comment in the code — it's the reason the module boundaries exist. It directly reduces input tokens because the prefix hits the LLM provider's prompt cache.
 
 ### 4. Optimization and runtime are properly decoupled
-DSPy/GEPA compile *offline* — they produce better programs that slot into the same interfaces. AdalFlow handles runtime escalation. This means you can ship a deterministic baseline today and swap in optimized versions without re-architecting. `configs/router-policy.md` is a human-readable policy document that mirrors the code — the baseline is reviewable by non-engineers.
+DSPy/GEPA compile *offline* — they produce better programs that slot into the same `route()` interface, so the orchestrator cannot tell which router it holds. Runtime escalation stays in an explicit controller. This means the deterministic baseline ships today and an optimized version swaps in without re-architecting. `configs/router-policy.md` is a human-readable policy document that mirrors the code — the baseline is reviewable by non-engineers.
 
 ### 5. Durability is a first-class concern, not an afterthought
 The Temporal Nexus integration means that when a retrieval crashes mid-flight, Temporal resumes it. When a synthesis LLM call times out, the circuit breaker trips before cascading. When you need to scale one service independently of another, you add workers. This is production-grade resilience wired in from the scaffold stage.
@@ -105,7 +107,7 @@ The Temporal Nexus integration means that when a retrieval crashes mid-flight, T
 Every routing decision emits a counter. Every cache hit/miss. The evaluation plan defines exactly which metrics matter (cost per successful answer, p50/p95 latency, freshness correctness, successful-answer rate, search-mode distribution, evidence items, input tokens, retries). When Phase 3 arrives and DSPy is compiled against evaluation data, the leaderboard comparison is already wired.
 
 ### 8. The architecture accepts graceful degradation
-Every advanced dependency (DSPy, AdalFlow, Cognee SDK, Temporal, MinHash) is an **optional extras group** in `pyproject.toml`. The baseline works without them. This is rare in agent systems, which typically couple tightly to their frameworks.
+Every advanced dependency (DSPy, Cognee SDK, Temporal, MinHash) is an **optional extras group** in `pyproject.toml`. The baseline works without them, and the DSPy stage degrades to the deterministic decision on any failure rather than raising. This is rare in agent systems, which typically couple tightly to their frameworks.
 
 ---
 

@@ -50,7 +50,13 @@ Quantify whether Roubaix improves:
 1. chunk-only RAG baseline
 2. single graph-completion baseline
 3. Roubaix rule-based routing baseline
-4. Roubaix DSPy/GEPA-optimized configuration
+4. full-context baseline — retrieve broadly and let the model sort it out; the
+   comparison most likely to embarrass a graph system
+5. Roubaix DSPy/GEPA-optimized configuration — **excluded from the default set**,
+   because it requires an optional dependency and calls a paid API. Request it
+   explicitly with `--baselines dspy_router`. It raises rather than falling back
+   if DSPy is unavailable: a row labelled `dspy_router` that measured the
+   deterministic router would report a comparison that never happened.
 
 ## Acceptance gates
 
@@ -82,8 +88,16 @@ Routing, `scripts/eval_routing.py`, no Cognee instance and no LLM required:
 | tuning | 20 | 100% | 30% | +70 pts | 35% |
 | held-out | 26 | **85%** | 23% | **+62 pts** | 42% |
 
-Accuracy on routes the router flagged confident: **93%** (vs 85% overall), so
-the confidence flag carries usable signal.
+Accuracy split by the router's own confidence flag — the measurement that
+decided where a learned stage belongs (ADR-005):
+
+| Band | Share of held-out traffic | Accuracy | Misses |
+|---|---:|---:|---:|
+| confident | 58% | 93% | 1 of 4 |
+| unconfident | 42% | 73% | 3 of 4 |
+
+75% of the errors sit in 42% of the traffic, and the router identifies which 42%
+before spending anything. That is the band the DSPy stage serves.
 
 Held-out accuracy by bucket: ambiguous 100%, broad_summary 100%, local_factual
 100%, multi-hop 100%, structural_graph 75%, time_sensitive 75%,

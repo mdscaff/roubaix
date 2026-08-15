@@ -17,7 +17,8 @@ One number here is a real measurement. It is reported with the reference points 
 | Routing accuracy, **held-out** corpus (n=26) | **85%** | The honest number. These queries were written without reference to the router's patterns and have not been tuned against. |
 | Routing accuracy, tuning corpus (n=20) | 100% | An upper bound, not a measurement. The rules were written against this corpus. |
 | Best single fixed mode, held-out | 23% | What "always pick the commonest mode" scores. The router's lift is **+62 points**. |
-| Accuracy when the router reports confidence | 93% | The confidence flag carries signal, so it is usable as an escalation input. |
+| Accuracy when the router reports confidence | 93% | 58% of traffic. |
+| Accuracy when the router reports **low** confidence | 73% | 42% of traffic, holding 3 of the 4 misses. This is the band the DSPy stage serves. |
 
 Reproduce with `uv run python scripts/eval_routing.py`. It needs no Cognee instance, no LLM, and no network — routing is a pure function of the query, which is why it is the one metric gated in CI.
 
@@ -59,6 +60,8 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 
 **Stopping is a vocabulary, not a log line.** Every outcome carries a `stop_reason` from a closed enum — `sufficient_evidence`, `limit_latency`, `freshness_unverifiable`, `degraded_retrieval`, `ladder_exhausted`, and so on. A budget trip is an outcome, not an error, so it lives in the same enum as a normal accept. That makes "how often do we stop on the latency ceiling" a query over telemetry rather than a grep over strings.
 
+**The learned router earns its place or does not run.** DSPy is not a replacement for the deterministic router — it is a second stage gated on the router's own confidence flag, so 58% of queries never reach an LM. Any failure (no `opt` extra, no LM, provider error, invalid output) falls back to the deterministic decision. The eval baseline is the one place this inverts: it raises rather than falling back, because a row labelled `dspy_router` that silently measured the deterministic router would report a comparison that never happened.
+
 **Evidence reduction is disclosed.** Withheld items leave a marker naming how to retrieve them, so the synthesizer can distinguish "there was no more evidence" from "there was more and it was dropped".
 
 ## Current state
@@ -77,11 +80,11 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | LLM synthesis | OpenRouter; failures fail closed |
 | NodeSet scoping | Caller-supplied and honoured; **not derived** — see roadmap |
 | Temporal / Nexus | Scaffold; behind the main orchestrator (see ADR-002) |
-| DSPy / GEPA | Not wired. Design in [docs/roadmap.md](docs/roadmap.md) |
+| DSPy / GEPA learned router | **Wired** — runs only on the unconfident band (42% of traffic, holding 75% of errors); degrades to deterministic on any failure. No compile run recorded yet. See [ADR-005](docs/adr/ADR-005-dspy-learned-stage-over-the-ambiguous-band.md) |
 | AdalFlow | **Rejected** — see [ADR-003](docs/adr/ADR-003-reject-adalflow-keep-explicit-controller.md) |
 | Strands Agents SDK | **Patterns adopted, dependency refused** — see [ADR-004](docs/adr/ADR-004-evaluate-strands-adopt-patterns-not-dependency.md) |
 
-**119 tests passing.** All dependencies current as of August 2026.
+**140 tests passing** with the optional `opt` extra installed; 121 passing and the DSPy suite skipped without it, which is how CI runs. All dependencies current as of August 2026.
 
 ## Quickstart
 
@@ -124,6 +127,8 @@ uv run python scripts/run_eval.py --report        # full pipeline, needs live Co
 - `docs/adr/` — architecture decisions, including what was rejected and why
 - `app/services/` — router, evidence packer, runtime controller, cache, orchestrator
 - `app/evals/` — eval runner, baselines, routing eval, report
+- `app/integrations/dspy_program.py` — learned router stage (optional `opt` extra)
+- `scripts/optimize_router.py` — GEPA compile; `--dry-run` reports the plan without calling an LM
 - `evals/queries.jsonl`, `evals/queries_heldout.jsonl` — tuning and held-out corpora
 
 ## Notes for engineers

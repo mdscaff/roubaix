@@ -145,7 +145,18 @@ already models the second half.
 
 ## Tier 2 — clear value, more work
 
-### 5. Wire DSPy + GEPA at the ambiguous band only
+### 5. Wire DSPy + GEPA at the ambiguous band only — **DONE**
+
+Implemented in `app/integrations/dspy_program.py` and `gepa_optimizer.py`; see
+[ADR-005](adr/ADR-005-dspy-learned-stage-over-the-ambiguous-band.md). The band
+was measured rather than assumed: the unconfident band is 42% of held-out
+traffic at 73% accuracy and holds 3 of 4 misses, against 93% for the confident
+band.
+
+**Remaining:** run an actual compile and judge it on the held-out corpus. If it
+does not beat the scored rule engine, that is a legitimate finding and should be
+published as one. Original reasoning follows.
+
 
 Keep the deterministic scored router as the cheap first stage; hand it a learned
 second stage for the queries where nothing clears `MIN_SCORE` or the win is not

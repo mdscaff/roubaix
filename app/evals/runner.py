@@ -9,7 +9,7 @@ from pathlib import Path
 from time import perf_counter
 
 from app.domain.models import AnswerResult, QueryRequest
-from app.evals.baselines import Baseline, create_orchestrator
+from app.evals.baselines import DEFAULT_BASELINES, Baseline, create_orchestrator
 from app.evals.models import EvalQuery, EvalSummary
 from app.evals.report import (
     collect_validity_warnings,
@@ -99,7 +99,7 @@ async def run_eval(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     corpus = load_corpus(corpus_path)
-    selected = list(baselines or Baseline)
+    selected = list(baselines or DEFAULT_BASELINES)
     traces: list[EvalTrace] = []
 
     for baseline in selected:

@@ -23,6 +23,10 @@ class Baseline(StrEnum):
     # retrieval architecture avoids being compared against the thing it must
     # beat to justify its complexity.
     FULL_CONTEXT = "full_context"
+    # Learned second stage over the deterministic router. Requires the `opt`
+    # extra and a configured LM, so it is excluded from DEFAULT_BASELINES and
+    # must be requested explicitly.
+    DSPY_ROUTER = "dspy_router"
 
 
 BASELINE_MODES: dict[Baseline, SearchMode | None] = {
@@ -30,7 +34,18 @@ BASELINE_MODES: dict[Baseline, SearchMode | None] = {
     Baseline.GRAPH_ONLY: SearchMode.GRAPH_COMPLETION,
     Baseline.ROUBAIX_RULES: None,
     Baseline.FULL_CONTEXT: SearchMode.CHUNKS,
+    Baseline.DSPY_ROUTER: None,
 }
+
+# Baselines run when none are named. The DSPy baseline is omitted because it
+# costs money and needs an optional dependency; an eval run must not silently
+# start calling an LM.
+DEFAULT_BASELINES: tuple[Baseline, ...] = (
+    Baseline.CHUNKS_ONLY,
+    Baseline.GRAPH_ONLY,
+    Baseline.ROUBAIX_RULES,
+    Baseline.FULL_CONTEXT,
+)
 
 # Effectively unbounded packing for the full-context baseline.
 _FULL_CONTEXT_TOKENS = 1_000_000
@@ -48,12 +63,33 @@ class UnboundedPacker(EvidencePacker):
 
 
 def router_for_baseline(baseline: Baseline) -> QueryRouter:
+    if baseline is Baseline.DSPY_ROUTER:
+        return _dspy_router()
     forced = BASELINE_MODES[baseline]
     if forced is None:
         return QueryRouter()
     if baseline is Baseline.FULL_CONTEXT:
         return ForcedModeRouter(forced, evidence_budget=_FULL_CONTEXT_TOKENS)
     return ForcedModeRouter(forced)
+
+
+def _dspy_router() -> QueryRouter:
+    """Build the DSPy router, or fail loudly.
+
+    Deliberately does NOT fall back to the deterministic router. Everywhere else
+    in this service a DSPy failure degrades quietly to the baseline, because
+    answering is more important than optimising. Here the opposite holds: an
+    eval labelled `dspy_router` that silently measured the deterministic router
+    would report a comparison that never happened. A measurement that cannot be
+    made must not quietly become a different measurement.
+    """
+    try:
+        from app.integrations.dspy_program import DspyRouter
+    except ImportError as exc:  # pragma: no cover - requires the `opt` extra
+        raise RuntimeError(
+            "Baseline 'dspy_router' requires the `opt` extra: uv sync --extra opt"
+        ) from exc
+    return DspyRouter()
 
 
 def create_orchestrator(

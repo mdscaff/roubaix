@@ -44,13 +44,34 @@ def main() -> None:
         action="store_true",
         help="Exit non-zero if the router does not beat the best single fixed mode.",
     )
+    parser.add_argument(
+        "--dspy-artifact",
+        type=Path,
+        default=None,
+        help=(
+            "Evaluate a GEPA-compiled router instead of the deterministic one. "
+            "Requires the `opt` extra and calls an LM for unconfident queries."
+        ),
+    )
     args = parser.parse_args()
+
+    router = None
+    if args.dspy_artifact is not None:
+        from app.integrations.dspy_program import DspyRouter, load_compiled
+
+        router = DspyRouter(program=load_compiled(args.dspy_artifact))
 
     corpora = args.corpus or [
         REPO_ROOT / "evals" / "queries.jsonl",
         REPO_ROOT / "evals" / "queries_heldout.jsonl",
     ]
-    reports = [evaluate_routing(path) for path in corpora]
+    reports = [evaluate_routing(path, router=router) for path in corpora]
+    if router is not None:
+        print(
+            f"\nLearned stage consulted on {router.llm_calls} queries "
+            f"({router.fallbacks} fell back to the deterministic decision).\n",
+            file=sys.stderr,
+        )
     print(to_json(reports) if args.json else format_report(reports))
 
     failures: list[str] = []

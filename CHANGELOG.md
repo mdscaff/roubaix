@@ -2,6 +2,54 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.4.0] — 2026-08-15
+
+DSPy wired for real; AdalFlow fully removed from the documentation.
+
+### Added
+
+- **DSPy learned router stage** (`app/integrations/dspy_program.py`). It runs
+  only on the band the deterministic router flags as unconfident — measured at
+  42% of held-out traffic, 73% accurate, holding 3 of the 4 misses, against 93%
+  for the confident band. 58% of queries never reach an LM. Implements the same
+  `route()` contract, so the orchestrator cannot tell which router it holds.
+- **GEPA optimizer** (`app/integrations/gepa_optimizer.py`) with a cost-aware
+  feedback metric. The score is `0.7 * correct + 0.3 * cost_efficiency`, because
+  a correctness-only metric converges on the most expensive mode — it is never
+  *wrong*, only wasteful. The metric returns text, not a float: GEPA passes
+  `feedback` to the reflection prompt verbatim, so it names over-escalation and
+  under-escalation distinctly in Roubaix's own vocabulary.
+- **`scripts/optimize_router.py`**, with `--dry-run` (reports the split and the
+  ~1300-metric-call budget without calling an LM) and a hard refusal to compile
+  on the held-out corpus.
+- **`scripts/eval_routing.py --dspy-artifact`** so a compiled program can be
+  judged on the held-out corpus, reporting how many queries reached the LM.
+- **`Baseline.DSPY_ROUTER`**, excluded from the default set so an eval run never
+  starts calling a paid API on its own.
+- [ADR-005](docs/adr/ADR-005-dspy-learned-stage-over-the-ambiguous-band.md).
+
+### Changed
+
+- The DSPy stage is an *enhancement*: a missing `opt` extra, a missing artifact,
+  an unconfigured LM, a provider error, or an invalid mode string all fall back
+  to the deterministic decision. The eval baseline is the one place this
+  inverts — it raises, because a row labelled `dspy_router` that silently
+  measured the deterministic router would report a comparison that never
+  happened.
+- Removed the last AdalFlow references from `docs/overview.md`, `CLAUDE.md`, and
+  the demo narration. ADR-001's AdalFlow line is marked superseded rather than
+  rewritten.
+- Corrected a claim previously repeated in `router.py` and the docs: GEPA
+  optimizes instruction *text*, not numeric weights. The rule weights are
+  hand-tuned and measured, not optimizer output.
+
+### Not established
+
+No compile run has been recorded. Whether GEPA beats the scored rule engine on
+the held-out corpus is open, and a negative result would be a legitimate finding
+given the deterministic router already scores 85% against 23% for the best fixed
+mode. No number from a compile is claimed anywhere.
+
 ## [0.3.1] — 2026-08-15
 
 Dependency refresh and selective adoption of agent-harness patterns.

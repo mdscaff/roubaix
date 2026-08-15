@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "roubaix"
-version = "0.3.1"
+version = "0.4.0"
 description = "Cognee-centered graph retrieval experiment with cost-aware routing and DSPy/GEPA optimization"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -102,7 +102,7 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["cognee", "cognee.*", "cognee_community_graph_adapter_pggraph"]
+module = ["cognee", "cognee.*", "cognee_community_graph_adapter_pggraph", "dspy", "dspy.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

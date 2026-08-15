@@ -189,3 +189,34 @@ def test_create_orchestrator_is_independent_per_baseline() -> None:
     orch_a = create_orchestrator(Baseline.CHUNKS_ONLY)
     orch_b = create_orchestrator(Baseline.ROUBAIX_RULES)
     assert orch_a.cache is not orch_b.cache
+
+
+def test_dspy_baseline_is_not_run_by_default() -> None:
+    """An eval run must not silently start calling (and paying for) an LLM."""
+    from app.evals.baselines import DEFAULT_BASELINES
+
+    assert Baseline.DSPY_ROUTER not in DEFAULT_BASELINES
+    assert Baseline.FULL_CONTEXT in DEFAULT_BASELINES
+
+
+def test_dspy_baseline_never_silently_becomes_the_deterministic_router() -> None:
+    """A measurement that cannot be made must not become a different measurement.
+
+    Everywhere else a DSPy failure degrades quietly to the baseline, because
+    answering matters more than optimising. Here the opposite holds: an eval row
+    labelled `dspy_router` that actually measured the deterministic router would
+    report a comparison that never happened.
+    """
+    from app.evals import baselines as baselines_module
+
+    original = baselines_module._dspy_router
+
+    def unavailable() -> object:
+        raise RuntimeError("Baseline 'dspy_router' requires the `opt` extra")
+
+    baselines_module._dspy_router = unavailable  # type: ignore[assignment]
+    try:
+        with pytest.raises(RuntimeError, match="requires the `opt` extra"):
+            router_for_baseline(Baseline.DSPY_ROUTER)
+    finally:
+        baselines_module._dspy_router = original  # type: ignore[assignment]

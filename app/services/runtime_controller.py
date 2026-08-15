@@ -215,10 +215,7 @@ class RuntimeController:
                 self._strict_freshness
                 and packed.evidence_items
                 and not packed.temporal_grounded
-                and (
-                    route.mode is SearchMode.TEMPORAL
-                    or SearchMode.TEMPORAL in attempted_modes
-                )
+                and (route.mode is SearchMode.TEMPORAL or SearchMode.TEMPORAL in attempted_modes)
             ):
                 return ControlDecision(
                     action=ControlAction.FAIL_CLOSED,
