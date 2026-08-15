@@ -21,6 +21,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  # starlette 1.6 deprecates using httpx with its TestClient and prefers
+  # httpx2. Test-only: application code still uses httpx directly, which is
+  # not deprecated.
+  "httpx2>=2.10.0",
   "pytest>=9.1.1",
   "pytest-asyncio>=1.4.0",
   "ruff>=0.16.3",
