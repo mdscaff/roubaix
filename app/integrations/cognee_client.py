@@ -119,6 +119,10 @@ class CogneeClient:
         }
         if node_sets:
             kwargs["node_name"] = node_sets
+            # Explicit, not defaulted: OR means "any of these NodeSets", which
+            # is the correct semantic for entity-derived scope (a query naming
+            # two entities wants evidence about either, not the intersection).
+            kwargs["node_name_filter_operator"] = "OR"
 
         raw_results = await cognee.search(query, **kwargs)
         evidence = evidence_from_search_results(
