@@ -2,6 +2,86 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.3.0] — 2026-08-15
+
+Correctness and honesty pass following a full audit of the pipeline against
+its stated design, plus a survey of comparable agent harnesses and graph-memory
+systems. See `docs/roadmap.md` for what the research recommends next.
+
+### Fixed — correctness
+
+- **Fabricated evidence could be answered from and cached.** A Cognee failure
+  was caught and replaced with placeholder evidence, synthesized into a fluent
+  answer, marked `accepted: true`, and cached for an hour. Retrieval failures
+  now carry a `degraded` flag; the controller fails closed on it by default and
+  degraded answers are never cached.
+- **Inverted relationships shared a cache key.** `normalize()` sorted tokens, so
+  "does A depend on B" and "does B depend on A" produced the same key and one
+  could be served the other's answer. Normalization is now order-preserving.
+- **Router phrases could never match.** Multi-word patterns were matched against
+  the sorted, stop-word-stripped bag, so "depends on" and "how are ... organized"
+  were unmatchable. `GRAPH_COMPLETION` was unreachable entirely, capping the
+  multi-hop bucket at zero.
+- **Substring matching bought expensive modes.** "concurrent" matched "current"
+  (→ TEMPORAL, 120s TTL), "knowledge" matched "edge" (→ CYPHER). Patterns now
+  use word boundaries.
+- **Freshness contract was bypassed by the cache and satisfiable without a
+  timestamp.** `freshness_required` is now part of the cache key, and a
+  freshness-required query must return evidence carrying a parseable date or the
+  controller refuses.
+- **A dead LLM provider was invisible.** Synthesis failures returned a template
+  marked accepted. They now fail closed. A malformed JSON body (ValueError, not
+  an httpx.HTTPError) previously escaped as an unhandled 500.
+- **The evidence budget was discarded at packing time**, making the router's
+  cost decision decorative.
+- **The Cognee env bridge was a no-op in the API process** — cognee was imported
+  before `configure_cognee()` ran.
+- **`Timer` minted one metric key per distinct millisecond** — unbounded
+  cardinality.
+
+### Added
+
+- **Scored router** with weighted signals, cost-rank tie-break, negation
+  suppression, confidence margin, and per-decision signal/score telemetry.
+- **Progressive escalation** — widen the same mode before climbing a terminating
+  ladder; no mode is attempted twice.
+- **Real cost accounting** — provider-reported usage when available, explicitly
+  labelled estimates otherwise, per-model price table.
+- **Caller cost ceiling** that trims the evidence pack rather than refusing.
+- **Held-out routing corpus** (`evals/queries_heldout.jsonl`, n=26) and
+  `scripts/eval_routing.py`, gated in CI. Measured: **85% held-out accuracy vs
+  23% for the best single fixed mode**.
+- **`full_context` eval baseline** — the comparison most likely to embarrass a
+  graph system.
+- **Losable acceptance gates** with PASS/FAIL/UNKNOWN verdicts and run validity
+  warnings.
+- **Timeouts** on retrieval and synthesis; pooled HTTP client.
+- `docs/roadmap.md`, ADR-003.
+
+### Removed
+
+- **AdalFlow.** Evaluated and rejected — it is an auto-optimization library with
+  no retry/escalation/fallback primitives, overlapping DSPy rather than the
+  runtime controller, with no release since September 2025. See ADR-003.
+- **Fabricated demo telemetry.** The demo page substituted invented timings and
+  a route mode the router could not emit when the API was unreachable.
+
+### Changed
+
+- README leads with the one real measurement and an explicit "what is not
+  measured" section.
+- API declares `AnswerResult` as its response model and returns 502 rather than
+  leaking a traceback.
+- Cache key covers query, dataset, freshness, NodeSet scope, model, caller
+  identity, and a policy version.
+
+### Known gaps
+
+- NodeSet scoping is caller-supplied, not derived.
+- No external benchmark has been run; no live-retrieval cost figure exists.
+- DSPy/GEPA are not wired. Prompt-prefix caching yields no discount at the
+  current prefix length.
+
 ## [0.2.0] — 2026-05-30
 
 First integrated baseline after the initial scaffold. Merged via [PR #1](https://github.com/mdscaff/roubaix/pull/1).
