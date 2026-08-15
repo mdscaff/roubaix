@@ -8,31 +8,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "adalflow"
-version = "1.1.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "asyncstdlib" },
-    { name = "backoff" },
-    { name = "colorama" },
-    { name = "diskcache" },
-    { name = "jinja2" },
-    { name = "jsonlines" },
-    { name = "nest-asyncio" },
-    { name = "numpy" },
-    { name = "pydantic" },
-    { name = "pytest-asyncio" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "tiktoken" },
-    { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f7/d6/9320d6091a110fefbc55e8f4e1625e90e9f3f3e8872f976a0fa247e4e97a/adalflow-1.1.3.tar.gz", hash = "sha256:3618efd8b40aea914695c76f2c91ee7011254e4ab67ecedda4f95c0f0d7cc6a8", size = 328063, upload-time = "2025-09-25T03:26:06.464Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/a3/407e3430ae71975dda87f790ed324a059b287fcaf6a567d8b05f2ad49a29/adalflow-1.1.3-py3-none-any.whl", hash = "sha256:263ef24feeae919150fcb34e7863740294f055c14b028d79bcd8f012f4c9c848", size = 400014, upload-time = "2025-09-25T03:26:04.592Z" },
-]
-
-[[package]]
 name = "aiofiles"
 version = "25.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -387,15 +362,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/7a/15e37d45e7f7c94facc1e9148c0e455e8f33c08f0b8a0b1deb2c5171771b/asyncpg-0.31.0-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:8df714dba348efcc162d2adf02d213e5fab1bd9f557e1305633e851a61814a7a", size = 3429426, upload-time = "2025-11-24T23:26:41.032Z" },
     { url = "https://files.pythonhosted.org/packages/13/d5/71437c5f6ae5f307828710efbe62163974e71237d5d46ebd2869ea052d10/asyncpg-0.31.0-cp314-cp314t-win32.whl", hash = "sha256:1b41f1afb1033f2b44f3234993b15096ddc9cd71b21a42dbd87fc6a57b43d65d", size = 614495, upload-time = "2025-11-24T23:26:42.659Z" },
     { url = "https://files.pythonhosted.org/packages/3c/d7/8fb3044eaef08a310acfe23dae9a8e2e07d305edc29a53497e52bc76eca7/asyncpg-0.31.0-cp314-cp314t-win_amd64.whl", hash = "sha256:bd4107bb7cdd0e9e65fae66a62afd3a249663b844fa34d479f6d5b3bef9c04c3", size = 706062, upload-time = "2025-11-24T23:26:44.086Z" },
-]
-
-[[package]]
-name = "asyncstdlib"
-version = "3.14.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3a/66/7b76f2b48afc5c8b4648500a4ff9869f83528e3d601a19de51da18b5e8a5/asyncstdlib-3.14.0.tar.gz", hash = "sha256:f99396992a3bba7495d8cf6c832bfe8c8727f61213233d3569a5a9cbd1c04385", size = 51074, upload-time = "2026-03-20T21:06:46.025Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/50/463443651ddb0ba66c289d5649369099ab72b4665888b337ed25ea622550/asyncstdlib-3.14.0-py3-none-any.whl", hash = "sha256:cad90c590ce357da6e70c56f0e2ad9e9baaf146a8fc2ede189879da57eb8bd87", size = 44255, upload-time = "2026-03-20T21:06:45.033Z" },
 ]
 
 [[package]]
@@ -1700,18 +1666,6 @@ wheels = [
 ]
 
 [[package]]
-name = "jsonlines"
-version = "4.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "attrs" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/35/87/bcda8e46c88d0e34cad2f09ee2d0c7f5957bccdb9791b0b934ec84d84be4/jsonlines-4.0.0.tar.gz", hash = "sha256:0c6d2c09117550c089995247f605ae4cf77dd1533041d366351f6f298822ea74", size = 11359, upload-time = "2023-09-01T12:34:44.187Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/62/d9ba6323b9202dd2fe166beab8a86d29465c41a0288cbe229fac60c1ab8d/jsonlines-4.0.0-py3-none-any.whl", hash = "sha256:185b334ff2ca5a91362993f42e83588a360cf95ce4b71a73548502bda52a7c55", size = 8701, upload-time = "2023-09-01T12:34:42.563Z" },
-]
-
-[[package]]
 name = "jsonschema"
 version = "4.26.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2348,15 +2302,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6d/fd/91545e604bc3dad7dca9ed03284086039b294c6b3d75c0d2fa45f9e9caf3/nbformat-5.10.4.tar.gz", hash = "sha256:322168b14f937a5d11362988ecac2a4952d3d8e3a2cbeb2319584631226d5b3a", size = 142749, upload-time = "2024-04-04T11:20:37.371Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a9/82/0340caa499416c78e5d8f5f05947ae4bc3cba53c9f038ab6e9ed964e22f1/nbformat-5.10.4-py3-none-any.whl", hash = "sha256:3b48d6c8fbca4b299bf3982ea7db1af21580e4fec269ad087b9e81588891200b", size = 78454, upload-time = "2024-04-04T11:20:34.895Z" },
-]
-
-[[package]]
-name = "nest-asyncio"
-version = "1.6.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/83/f8/51569ac65d696c8ecbee95938f89d4abf00f47d58d48f6fbabfe8f0baefe/nest_asyncio-1.6.0.tar.gz", hash = "sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe", size = 7418, upload-time = "2024-01-21T14:25:19.227Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/c4/c2971a3ba4c6103a3d10c4b0f24f461ddc027f0f09763220cf35ca1401b3/nest_asyncio-1.6.0-py3-none-any.whl", hash = "sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c", size = 5195, upload-time = "2024-01-21T14:25:17.223Z" },
 ]
 
 [[package]]
@@ -3483,7 +3428,6 @@ eval = [
     { name = "langfuse" },
 ]
 opt = [
-    { name = "adalflow" },
     { name = "cognee" },
     { name = "datasketch" },
     { name = "dspy" },
@@ -3499,7 +3443,6 @@ temporal = [
 
 [package.metadata]
 requires-dist = [
-    { name = "adalflow", marker = "extra == 'opt'", specifier = ">=1.1.0" },
     { name = "asyncpg", marker = "extra == 'pggraph'", specifier = ">=0.30.0" },
     { name = "cognee", marker = "extra == 'opt'", specifier = ">=1.1.0" },
     { name = "cognee-community-graph-adapter-pggraph", marker = "extra == 'pggraph'", git = "https://github.com/topoteretes/cognee-community.git?subdirectory=packages%2Fgraph%2Fpggraph" },

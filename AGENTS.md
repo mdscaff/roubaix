@@ -4,7 +4,7 @@ Project instructions for Codex.
 
 ## Objective
 
-Implement Roubaix as a measurable, production-credible experiment for Cognee-centered graph retrieval with DSPy/GEPA optimization and AdalFlow runtime control.
+Implement Roubaix as a measurable, production-credible experiment for Cognee-centered graph retrieval with cost-aware routing, an explicit runtime controller, and DSPy/GEPA optimization.
 
 ## Non-negotiable rules
 
@@ -35,7 +35,7 @@ Implement Roubaix as a measurable, production-credible experiment for Cognee-cen
 - `app/services/evidence.py` owns evidence compression.
 - `app/services/runtime_controller.py` owns retry/escalation policy.
 - `app/integrations/dspy_program.py` and `app/integrations/gepa_optimizer.py` own optimization logic.
-- `app/integrations/adalflow_controller.py` owns AdalFlow-specific orchestration.
+- `app/services/runtime_controller.py` owns escalation and fail-closed policy (see ADR-003 for why this is not a framework).
 
 ## Guardrails
 

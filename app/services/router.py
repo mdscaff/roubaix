@@ -9,8 +9,11 @@ reasons:
    ordering; a score resolves them by evidence weight.
 2. Every decision carries the named signals that produced it, so routing can be
    explained and replayed from telemetry instead of re-argued.
-3. The weights are the exact surface a DSPy/GEPA optimizer can later tune
-   without rewriting control flow — see ``app/integrations/dspy_program.py``.
+3. Scores and confidence are the handoff surface for a learned second stage:
+   when nothing clears MIN_SCORE, or the win is not confident, an optimized
+   module can take the decision without the cheap path ever paying for an LLM
+   call. (GEPA reflects on instruction *text*, not on numeric weights — these
+   weights are hand-tuned and measured, not optimizer output.)
 
 Patterns are matched against the *order-preserving* normalized query. Matching
 against the sorted keyword bag (the previous behaviour) makes every multi-word
@@ -39,6 +42,14 @@ COST_RANK: dict[SearchMode, int] = {
 }
 
 
+# Negation flips the meaning of a signal without removing its keywords:
+# "services NOT connected to billing" is not a relationship lookup, and
+# "nothing changed today" is not a freshness question. A signal preceded by a
+# negation inside this character window is discarded rather than scored.
+_NEGATION = re.compile(r"\b(not|no|never|without|lack|lacks|lacking|except|excluding|besides)\b")
+_NEGATION_WINDOW = 24
+
+
 @dataclass(frozen=True)
 class Signal:
     """A named regex whose match contributes *weight* to a mode's score."""
@@ -50,6 +61,14 @@ class Signal:
     @classmethod
     def of(cls, name: str, pattern: str, weight: float = 1.0) -> "Signal":
         return cls(name=name, pattern=re.compile(pattern), weight=weight)
+
+    def fires(self, text: str) -> bool:
+        """True when this signal matches *text* and is not negated."""
+        match = self.pattern.search(text)
+        if match is None:
+            return False
+        window = text[max(0, match.start() - _NEGATION_WINDOW) : match.start()]
+        return _NEGATION.search(window) is None
 
 
 @dataclass(frozen=True)
@@ -142,6 +161,13 @@ DEFAULT_RULE = ModeRule(
 # (a bare "status", say) should not buy graph depth.
 MIN_SCORE = 2.0
 
+# A win is confident when it beats the runner-up by this factor. A query that
+# scores 3.0 TEMPORAL against 2.5 TRIPLET_COMPLETION was not really classified,
+# it was broken by rounding — and that is worth recording rather than hiding.
+# Downstream, low confidence is what an escalation policy (and later a learned
+# router) should key on.
+CONFIDENCE_MARGIN = 2.0
+
 
 class QueryRouter:
     """Deterministic baseline router before DSPy optimization."""
@@ -163,7 +189,7 @@ class QueryRouter:
         scores: dict[str, float] = {}
         fired: dict[SearchMode, list[str]] = {}
         for rule in self.rules:
-            matched = [s for s in rule.signals if s.pattern.search(q)]
+            matched = [s for s in rule.signals if s.fires(q)]
             if not matched:
                 continue
             scores[rule.mode.value] = sum(s.weight for s in matched)
@@ -177,16 +203,23 @@ class QueryRouter:
                 request,
                 signals=["caller.freshness_required", *fired.get(SearchMode.TEMPORAL, [])],
                 scores=scores,
+                confident=True,  # an explicit caller contract, not a guess
             )
 
         winner = self._select(scores)
         if winner is None:
-            return self._decision(DEFAULT_RULE, request, signals=[], scores=scores)
+            # Nothing cleared the bar. The cheap default is the right answer,
+            # but it is a fallback rather than a classification, so it is not
+            # reported as confident.
+            return self._decision(
+                DEFAULT_RULE, request, signals=[], scores=scores, confident=False
+            )
         return self._decision(
             self._rule_for(winner),
             request,
             signals=fired.get(winner, []),
             scores=scores,
+            confident=self._is_confident(scores, winner),
         )
 
     def _select(self, scores: dict[str, float]) -> SearchMode | None:
@@ -195,6 +228,14 @@ class QueryRouter:
         if not eligible:
             return None
         return max(eligible, key=lambda pair: (pair[1], -COST_RANK[pair[0]]))[0]
+
+    @staticmethod
+    def _is_confident(scores: dict[str, float], winner: SearchMode) -> bool:
+        """True when the winner beat every other mode by CONFIDENCE_MARGIN."""
+        others = [s for mode, s in scores.items() if mode != winner.value]
+        if not others:
+            return True
+        return scores[winner.value] >= CONFIDENCE_MARGIN * max(max(others), 1.0)
 
     def _rule_for(self, mode: SearchMode) -> ModeRule:
         for rule in self.rules:
@@ -209,6 +250,7 @@ class QueryRouter:
         *,
         signals: list[str],
         scores: dict[str, float],
+        confident: bool = True,
     ) -> RouteDecision:
         return RouteDecision(
             mode=rule.mode,
@@ -222,6 +264,7 @@ class QueryRouter:
             rationale=rule.rationale,
             signals=signals,
             scores=scores,
+            confident=confident,
         )
 
 

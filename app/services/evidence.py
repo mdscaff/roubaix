@@ -14,10 +14,18 @@ answer. Three things it must do that truncation alone does not:
 from __future__ import annotations
 
 import hashlib
+import re
 
 from app.core.config import settings
 from app.core.tokens import estimate_tokens
 from app.domain.models import PackedEvidence, RetrievalResult, SearchMode
+
+# A date-like token is the minimum evidence that a temporal retrieval actually
+# filtered on time. The upstream TEMPORAL retriever falls back to unfiltered
+# search when it cannot extract an interval from the query, and that fallback is
+# silent — evidence comes back, so a naive controller marks the freshness
+# contract satisfied. Requiring a parseable date is what makes the contract real.
+_DATE_LIKE = re.compile(r"\b(\d{4}-\d{2}(-\d{2})?|\d{4}/\d{2}/\d{2}|\d{1,2} \w+ \d{4})\b")
 
 
 def _fingerprint(item: str) -> str:
@@ -96,6 +104,7 @@ class EvidencePacker:
             token_estimate=tokens,
             dropped_duplicates=duplicates,
             dropped_over_budget=over_budget,
+            temporal_grounded=any(_DATE_LIKE.search(item) for item in items),
         )
 
     @staticmethod

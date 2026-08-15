@@ -24,6 +24,10 @@ from app.domain.models import PackedEvidence, QueryRequest, RouteDecision, Searc
 
 class ControlAction(str, Enum):
     ACCEPT = "accept"
+    # Widen the *same* mode (larger evidence budget) before paying for a more
+    # expensive one. Depth is a cheaper dial than algorithm, and jumping mode
+    # first skips the cheapest thing that could possibly work.
+    WIDEN = "widen"
     ESCALATE = "escalate"
     FAIL_CLOSED = "fail_closed"
 
@@ -65,9 +69,16 @@ MIN_EVIDENCE_TOKENS_RATIO = 0.1
 class RuntimeController:
     """Bounded, progressive fallback policy."""
 
-    def __init__(self, allow_stub_evidence: bool | None = None) -> None:
+    def __init__(
+        self,
+        allow_stub_evidence: bool | None = None,
+        strict_freshness: bool | None = None,
+    ) -> None:
         self._allow_stub = (
             settings.allow_stub_evidence if allow_stub_evidence is None else allow_stub_evidence
+        )
+        self._strict_freshness = (
+            settings.strict_freshness if strict_freshness is None else strict_freshness
         )
 
     def decide(
@@ -77,6 +88,7 @@ class RuntimeController:
         packed: PackedEvidence,
         retry_count: int,
         attempted_modes: frozenset[SearchMode] = frozenset(),
+        widened: bool = False,
     ) -> ControlDecision:
         # 1. Degraded evidence is fabricated evidence. Escalating cannot fix a
         #    substrate that is down, and answering from it is worse than not
@@ -88,20 +100,35 @@ class RuntimeController:
                 signals=["degraded"],
             )
 
-        # 2. A freshness contract that produced no temporal evidence is unmet.
-        #    Answering anyway is exactly the stale-answer failure the freshness
-        #    policy exists to prevent.
-        if (
-            route.requires_freshness_validation
-            and route.mode is not SearchMode.TEMPORAL
-            and SearchMode.TEMPORAL not in attempted_modes
-        ):
-            return self._escalate_to(
-                SearchMode.TEMPORAL,
-                route,
-                reason=f"freshness_required_unvalidated_in_{route.mode.value}",
-                signals=["freshness_unmet"],
-            )
+        # 2. Freshness contract. Two distinct failures, and conflating them was
+        #    letting stale answers through a gate that reported success.
+        if route.requires_freshness_validation:
+            # 2a. Wrong mode entirely — escalate to TEMPORAL and try again.
+            if route.mode is not SearchMode.TEMPORAL and SearchMode.TEMPORAL not in attempted_modes:
+                return self._escalate_to(
+                    SearchMode.TEMPORAL,
+                    route,
+                    reason=f"freshness_required_unvalidated_in_{route.mode.value}",
+                    signals=["freshness_unmet"],
+                )
+            # 2b. Right mode, but the evidence carries no date. Temporal
+            #     retrieval degrades silently to unfiltered search when it
+            #     cannot extract an interval from the query — evidence comes
+            #     back, so the contract *looks* satisfied. It is not: nothing
+            #     here can be checked against a point in time. Refusing is the
+            #     only honest answer, and it is what "freshness accuracy" as a
+            #     headline metric has to mean.
+            if (
+                self._strict_freshness
+                and route.mode is SearchMode.TEMPORAL
+                and packed.evidence_items
+                and not packed.temporal_grounded
+            ):
+                return ControlDecision(
+                    action=ControlAction.FAIL_CLOSED,
+                    reason="freshness_unverifiable_no_dated_evidence",
+                    signals=["freshness_ungrounded"],
+                )
 
         # 3. Empty or thin evidence relative to the budget the router asked for.
         threshold = max(1, math.ceil(route.evidence_budget * MIN_EVIDENCE_RATIO))
@@ -120,6 +147,22 @@ class RuntimeController:
                     ),
                     signals=[shortfall, "retry_limit"],
                 )
+            # Cheapest rung first: widen the current mode's budget before
+            # buying a more expensive mode. Only once per mode, so this cannot
+            # become a widening loop.
+            if route.evidence_budget < settings.max_evidence_items and not widened:
+                return ControlDecision(
+                    action=ControlAction.WIDEN,
+                    reason=f"{shortfall}_widen_{route.mode.value}",
+                    signals=[shortfall, "widen"],
+                    next_route=route.model_copy(
+                        update={
+                            "evidence_budget": settings.max_evidence_items,
+                            "rationale": f"widened {route.mode.value} budget after {shortfall}",
+                        }
+                    ),
+                )
+
             nxt = ESCALATION_LADDER.get(route.mode)
             if nxt is None or nxt in attempted_modes:
                 return ControlDecision(

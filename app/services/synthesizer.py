@@ -19,12 +19,18 @@ logger = logging.getLogger(__name__)
 # exact prefix match, so any per-request text here (a timestamp, the mode, the
 # query) would invalidate the cache on every call.
 #
-# Honest caveat: at this length the prefix is well under the minimum cacheable
-# prefix of the major providers (Anthropic bills a cache write only at 1024+
-# tokens; OpenAI auto-caches from 1024). Roubaix therefore gets no prefix-cache
-# discount today. The structure is here so that when the ontology summary and
-# few-shot examples land in the prefix, the discount is a config change rather
-# than a rewrite. Do not claim prefix-cache savings until measured.
+# Honest caveat: at ~120 tokens this prefix is under every provider's minimum
+# cacheable prefix, so Roubaix gets no prefix-cache discount today. The minimum
+# is model-dependent and NOT monotonic with model size — it ranges from 512
+# tokens on some models to 4096 on others, and below the minimum caching fails
+# silently (no error, just a zero cache-write count). Picking a cheaper model
+# can therefore silently cost you all caching.
+#
+# The structure is here so the discount becomes a content change rather than a
+# rewrite: once the ontology summary and few-shot examples move into the prefix
+# it clears the lower thresholds comfortably. Until then, do not claim
+# prefix-cache savings — verify with the provider's reported cache-read token
+# count before putting a number in the README.
 STATIC_SYSTEM_PROMPT = (
     "You are Roubaix, a retrieval-grounded assistant.\n"
     "Rules:\n"
@@ -51,6 +57,7 @@ class AnswerSynthesizer:
         self.model = model or settings.default_model
         self.endpoint = (endpoint or settings.default_llm_endpoint or "https://openrouter.ai/api/v1").rstrip("/")
         self.timeout_s = timeout_s if timeout_s is not None else settings.synthesis_timeout_s
+        self._http: httpx.AsyncClient | None = None
 
     async def synthesize(
         self,
@@ -59,9 +66,13 @@ class AnswerSynthesizer:
         packed: PackedEvidence,
     ) -> SynthesisResult:
         if not self.api_key:
+            # No provider configured. Expected in CI and local dev — labelled
+            # so it can never be mistaken for a synthesized answer.
             return SynthesisResult(
                 answer=self._fallback_answer(request, route, packed),
                 input_tokens_estimate=self._estimate_tokens(request, route, packed),
+                unsynthesized=True,
+                failure_reason="no_api_key_configured",
             )
 
         user_content = (
@@ -80,22 +91,33 @@ class AnswerSynthesizer:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_s) as client:
-                response = await client.post(
-                    f"{self.endpoint}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-                response.raise_for_status()
-                body = response.json()
-        except httpx.HTTPError as exc:
-            logger.warning("synthesis_http_error", extra={"error": str(exc)})
+            client = await self._client()
+            response = await client.post(
+                f"{self.endpoint}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+            body = response.json()
+        # ValueError covers a malformed JSON body, which is not an httpx.HTTPError
+        # and previously escaped as an unhandled 500.
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning(
+                "synthesis_failed",
+                extra={"error": str(exc), "error_type": type(exc).__name__},
+            )
+            # A provider outage is not an answer. The caller gets a placeholder
+            # that is explicitly marked failed, and the orchestrator refuses to
+            # accept or cache it. Returning a fluent template as an accepted
+            # answer is how a dead provider becomes invisible.
             return SynthesisResult(
                 answer=self._fallback_answer(request, route, packed),
                 input_tokens_estimate=self._estimate_tokens(request, route, packed),
+                failed=True,
+                failure_reason=f"{type(exc).__name__}: {exc}",
             )
 
         answer = self._extract_answer(body)
@@ -108,6 +130,20 @@ class AnswerSynthesizer:
             input_tokens_estimate=input_tokens,
             usage_measured=measured,
         )
+
+    async def _client(self) -> httpx.AsyncClient:
+        """Lazily create a pooled client.
+
+        A fresh AsyncClient per request means a full TLS handshake per
+        synthesis, which is pure added latency on the hot path.
+        """
+        if self._http is None or self._http.is_closed:
+            self._http = httpx.AsyncClient(timeout=self.timeout_s)
+        return self._http
+
+    async def aclose(self) -> None:
+        if self._http is not None and not self._http.is_closed:
+            await self._http.aclose()
 
     @staticmethod
     def _extract_answer(body: dict[str, Any]) -> str:

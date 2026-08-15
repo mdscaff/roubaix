@@ -46,6 +46,12 @@ class RouteDecision(BaseModel):
         default_factory=dict,
         description="Per-mode score from the rule engine, for tie-break auditing.",
     )
+    confident: bool = Field(
+        default=True,
+        description="False when the winning mode only narrowly beat its runner-up. "
+        "A narrow win is the signal that a learned router should take over, and "
+        "the signal that the runtime controller should escalate more readily.",
+    )
 
 
 class RetrievalEvidence(BaseModel):
@@ -81,6 +87,12 @@ class PackedEvidence(BaseModel):
     token_estimate: int = 0
     dropped_duplicates: int = 0
     dropped_over_budget: int = 0
+    temporal_grounded: bool = Field(
+        default=False,
+        description="True when at least one packed item carries a parseable date. "
+        "A freshness claim that cannot point at a timestamp is not a freshness "
+        "claim, so this is what the controller validates against.",
+    )
 
 
 class AnswerResult(BaseModel):
@@ -127,6 +139,19 @@ class SynthesisResult(BaseModel):
         description="True when input_tokens_estimate came from the provider's "
         "reported usage rather than a local heuristic. Cost reporting must not "
         "present an estimate as a measurement.",
+    )
+    failed: bool = Field(
+        default=False,
+        description="True when the LLM call failed and `answer` is a placeholder "
+        "rather than a synthesized answer. A placeholder that reads like an "
+        "answer must never be returned as an accepted one.",
+    )
+    failure_reason: str | None = None
+    unsynthesized: bool = Field(
+        default=False,
+        description="True when no LLM was configured, so `answer` is a local "
+        "template. Distinct from `failed`: this is expected in CI and local dev, "
+        "not a provider outage.",
     )
 
 

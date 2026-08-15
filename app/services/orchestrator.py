@@ -112,6 +112,7 @@ class QueryOrchestrator:
         retrieval_ms = 0
         attempted: set[SearchMode] = set()
         escalations: list[str] = []
+        widened = False
         packed: PackedEvidence | None = None
 
         for _ in range(MAX_ATTEMPTS):
@@ -130,11 +131,21 @@ class QueryOrchestrator:
 
             packed = self.evidence_packer.pack(result, evidence_budget=route.evidence_budget)
             decision = self.runtime_controller.decide(
-                request, route, packed, retry_count, frozenset(attempted)
+                request, route, packed, retry_count, frozenset(attempted), widened
             )
 
             if decision.action is ControlAction.ACCEPT:
                 break
+
+            # Widening retries the same mode with a larger budget. It does not
+            # consume the retry allowance reserved for mode escalation, but it
+            # is latched so it can happen at most once per query.
+            if decision.action is ControlAction.WIDEN and decision.next_route is not None:
+                metrics.increment("runtime:widen")
+                escalations.append(decision.reason)
+                widened = True
+                route = decision.next_route
+                continue
 
             if decision.action is ControlAction.FAIL_CLOSED or decision.next_route is None:
                 metrics.increment("runtime:fail_closed")
@@ -201,6 +212,22 @@ class QueryOrchestrator:
         ):
             synthesis = await self.synthesizer.synthesize(request, route, packed)
         synthesis_ms = int((perf_counter() - synthesis_start) * 1000)
+
+        # A failed LLM call yields a placeholder, not an answer. Accepting it
+        # would make a provider outage invisible in both the API response and
+        # the eval results.
+        if synthesis.failed:
+            metrics.increment("runtime:synthesis_failed")
+            return self._fail_closed(
+                route=route,
+                retry_count=retry_count,
+                reason=f"synthesis_failed:{synthesis.failure_reason}",
+                escalations=escalations,
+                retrieval_ms=retrieval_ms,
+                answer_start=answer_start,
+                packed=packed,
+            )
+
         total_ms = int((perf_counter() - answer_start) * 1000)
 
         cost = cost_for(
@@ -230,6 +257,10 @@ class QueryOrchestrator:
                 "escalation_chain": escalations,
                 "attempted_modes": sorted(m.value for m in attempted),
                 "route_signals": route.signals,
+                "route_confident": route.confident,
+                "widened": widened,
+                "temporal_grounded": packed.temporal_grounded,
+                "unsynthesized": synthesis.unsynthesized,
                 "degraded": packed.degraded,
                 "degraded_reason": packed.degraded_reason,
                 "budget_downgrade": budget_downgrade,
@@ -238,7 +269,10 @@ class QueryOrchestrator:
         )
 
         # Degraded answers are never cached: caching them would outlive the
-        # outage that produced them.
+        # outage that produced them. Answers produced with no LLM configured
+        # *are* cached — that is a stable deployment state rather than a
+        # transient failure, and the model is part of the cache key, so
+        # configuring a provider does not serve the old template.
         if not packed.degraded:
             self.cache.put(
                 cache_key,

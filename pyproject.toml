@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "roubaix"
 version = "0.2.0"
-description = "Cognee-centered graph retrieval experiment with DSPy/GEPA and AdalFlow"
+description = "Cognee-centered graph retrieval experiment with cost-aware routing and DSPy/GEPA optimization"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -32,7 +32,6 @@ temporal = [
 ]
 opt = [
   "dspy>=3.2.0",
-  "adalflow>=1.1.0",
   "cognee>=1.1.0",
   "datasketch>=1.10.0",
 ]

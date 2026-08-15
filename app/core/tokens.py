@@ -32,8 +32,15 @@ MODEL_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
 def estimate_tokens(text: str) -> int:
     """Return a heuristic token count for *text*.
 
-    Uses ``tiktoken`` when it is installed, otherwise a chars-per-token
-    approximation. Never returns 0 for non-empty input.
+    Uses ``tiktoken`` when installed, otherwise a chars-per-token approximation.
+    Never returns 0 for non-empty input.
+
+    Caveat: ``cl100k_base`` is OpenAI's tokenizer. It undercounts Anthropic
+    models by roughly 15-20% on prose and by more on code and non-Latin text,
+    and this price table contains Anthropic models. That is tolerable only
+    because every consumer of this number is told it is an estimate — see
+    ``CostEstimate.estimated``. Do not use it for billing reconciliation, and
+    prefer provider-reported usage wherever it is available.
     """
     if not text:
         return 0

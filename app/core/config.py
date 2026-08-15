@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     # exercise the pipeline without a live Cognee instance.
     allow_stub_evidence: bool = Field(default=False, alias="ROUBAIX_ALLOW_STUB_EVIDENCE")
 
+    # When true, a freshness-required query must return evidence carrying a
+    # parseable date. Without this the freshness contract is satisfied by any
+    # non-empty result, which is how stale answers pass a freshness gate.
+    strict_freshness: bool = Field(default=True, alias="ROUBAIX_STRICT_FRESHNESS")
+
     # Cache settings (inspired by HyperSpace Content Store)
     cache_max_size: int = Field(default=4096, alias="ROUBAIX_CACHE_MAX_SIZE")
     cache_default_ttl_s: float = Field(default=3600.0, alias="ROUBAIX_CACHE_DEFAULT_TTL_S")
