@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "roubaix"
-version = "0.4.0"
+version = "0.5.0"
 description = "Cognee-centered graph retrieval experiment with cost-aware routing and DSPy/GEPA optimization"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -46,6 +46,12 @@ opt = [
 demo = [
   "playwright>=1.62.0",
   "edge-tts>=7.2.8",
+]
+verify = [
+  # Tier-1 sufficiency scorer: MiniCheck-FT5, a 770M encoder with GPT-4-level
+  # fact-checking accuracy at ~400x lower cost (EMNLP 2024). Heavy (pulls
+  # torch); the gate runs Tier-0-only without it.
+  "minicheck>=0.1.2",
 ]
 eval = [
   # v4 is a breaking change: it is OpenTelemetry-based and removed

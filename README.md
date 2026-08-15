@@ -62,6 +62,8 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 
 **The learned router earns its place or does not run.** DSPy is not a replacement for the deterministic router — it is a second stage gated on the router's own confidence flag, so 58% of queries never reach an LM. Any failure (no `opt` extra, no LM, provider error, invalid output) falls back to the deterministic decision. The eval baseline is the one place this inverts: it raises rather than falling back, because a row labelled `dspy_router` that silently measured the deterministic router would report a comparison that never happened.
 
+**Sufficiency is judged at the set level.** Twelve on-budget items about the wrong entity pass every count and token check — so the controller now asks what the packed evidence set is *about*: stemmed query-term coverage over the union of the set (a multi-hop answer split across a bridge is not penalized), with an optional 770M verifier refining the uncertain band. Off-topic sets are refused or escalated; a fully-covering set is an answer, however small.
+
 **Evidence reduction is disclosed.** Withheld items leave a marker naming how to retrieve them, so the synthesizer can distinguish "there was no more evidence" from "there was more and it was dropped".
 
 ## Current state
@@ -73,18 +75,21 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | Cognee retrieval | Live SDK when configured; flagged-degraded stub otherwise |
 | Evidence packing (dedup, token budget, disclosure) | Working |
 | Runtime controller (widen → escalate → fail closed) | Working |
+| Set-level sufficiency gate (Tier 0 lexical; Tier 1 MiniCheck via `verify` extra) | Working; acceptance gates encoded as losable tests |
+| Evidentiality-ordered packing + budget-pressure observable | Working; one flag back to rank order |
+| NodeSet derivation by entity anchoring (`ROUBAIX_NODESET_INDEX_PATH`) | Working; caller scope always wins |
 | Cost accounting (measured vs estimated) | Working; no live run recorded |
 | Caller ceilings (`max_cost_cents`, `max_latency_ms`) | Working; cost trims the pack, latency stops the loop |
 | Stop-reason vocabulary + OTel `gen_ai.*` attributes | Working |
 | Eval harness (5 baselines, losable gates, validity warnings) | Working; 4 run by default, `dspy_router` on request |
 | LLM synthesis | OpenRouter; failures fail closed |
-| NodeSet scoping | Caller-supplied and honoured; **not derived** — see roadmap |
+| NodeSet scoping (learned triple scorer, C2) | Deferred until live telemetry can mine training labels |
 | Temporal / Nexus | Scaffold; behind the main orchestrator (see ADR-002) |
 | DSPy / GEPA learned router | **Wired** — runs only on the unconfident band (42% of traffic, holding 75% of errors); degrades to deterministic on any failure. No compile run recorded yet. See [ADR-005](docs/adr/ADR-005-dspy-learned-stage-over-the-ambiguous-band.md) |
 | AdalFlow | **Rejected** — see [ADR-003](docs/adr/ADR-003-reject-adalflow-keep-explicit-controller.md) |
 | Strands Agents SDK | **Patterns adopted, dependency refused** — see [ADR-004](docs/adr/ADR-004-evaluate-strands-adopt-patterns-not-dependency.md) |
 
-**140 tests passing** with the optional `opt` extra installed; 121 passing and the DSPy suite skipped without it, which is how CI runs. All dependencies current as of August 2026.
+**157 tests passing** with the optional `opt` extra installed; 121 passing and the DSPy suite skipped without it, which is how CI runs. All dependencies current as of August 2026.
 
 ## Quickstart
 
@@ -148,6 +153,7 @@ would destroy the only unbiased measurement here.
 - `CHANGELOG.md` — release notes
 - `docs/architecture.md` — technical architecture memo
 - `docs/roadmap.md` — what to build next, with the evidence behind each item
+- `docs/implementation-plan.md` — the build plan derived from a verified research pass, including what the research could *not* establish
 - `docs/evaluation-plan.md` — metrics, corpora, known misses, benchmark plan
 - `docs/adr/` — architecture decisions, including what was rejected and why
 - `app/services/` — router, evidence packer, runtime controller, cache, orchestrator

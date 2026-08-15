@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 
 from app.domain.models import QueryRequest, RouteDecision, SearchMode
 from app.services.normalizer import QueryNormalizer
+from app.services.scoping import NodeSetIndex, load_index
 
 # Relative retrieval cost, cheapest first. Used to break score ties toward the
 # cheaper mode — the project's core thesis is "cheapest valid mode wins".
@@ -202,9 +203,13 @@ class QueryRouter:
         self,
         normalizer: QueryNormalizer | None = None,
         rules: tuple[ModeRule, ...] = RULES,
+        node_set_index: NodeSetIndex | None = None,
     ) -> None:
         self.normalizer = normalizer or QueryNormalizer()
         self.rules = rules
+        # Lexical entity index for scope derivation (Phase C1). None when no
+        # index is configured, in which case scope stays caller-supplied only.
+        self.node_set_index = node_set_index if node_set_index is not None else load_index()
 
     def route(self, request: QueryRequest) -> RouteDecision:
         # Use the pre-normalized form if the orchestrator already computed it.
@@ -267,8 +272,8 @@ class QueryRouter:
                 return rule
         return DEFAULT_RULE
 
-    @staticmethod
     def _decision(
+        self,
         rule: ModeRule,
         request: QueryRequest,
         *,
@@ -276,19 +281,39 @@ class QueryRouter:
         scores: dict[str, float],
         confident: bool = True,
     ) -> RouteDecision:
+        node_sets, scope_signals = self._scope(request)
         return RouteDecision(
             mode=rule.mode,
-            # NodeSet scope is caller-supplied for now. Learned scoping is the
-            # first DSPy target — see docs/implementation-plan.md.
-            node_sets=list(request.node_sets),
+            node_sets=node_sets,
             evidence_budget=rule.evidence_budget,
             requires_freshness_validation=(
                 rule.requires_freshness_validation or request.freshness_required
             ),
             rationale=rule.rationale,
-            signals=signals,
+            signals=[*signals, *scope_signals],
             scores=scores,
             confident=confident,
+        )
+
+    def _scope(self, request: QueryRequest) -> tuple[list[str], list[str]]:
+        """Derive NodeSet scope by entity anchoring when the caller sent none.
+
+        A caller-supplied scope always wins — the caller's contract is never
+        widened or second-guessed. Derivation is a pure function of the query
+        and the index, so identical queries always derive identical scope,
+        which is what keeps the cache correct without putting the derived
+        scope into the key.
+        """
+        if request.node_sets:
+            return list(request.node_sets), ["scope.caller_supplied"]
+        if self.node_set_index is None:
+            return [], []
+        matches = self.node_set_index.derive(request.query)
+        if not matches:
+            return [], []
+        return (
+            [nodeset for nodeset, _ in matches],
+            [f"scope.entity_match:{nodeset}" for nodeset, _ in matches],
         )
 
 

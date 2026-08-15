@@ -52,6 +52,29 @@ class Settings(BaseSettings):
     # exercise the pipeline without a live Cognee instance.
     allow_stub_evidence: bool = Field(default=False, alias="ROUBAIX_ALLOW_STUB_EVIDENCE")
 
+    # Sufficiency gate (set-level; see app/services/sufficiency.py).
+    # Coverage = fraction of query keywords found anywhere in the packed set.
+    # Thresholds are empirical: MiniCheck's [0,1] output is not demonstrated to
+    # be calibrated, so tier-1's threshold especially is a dial, not a truth.
+    sufficiency_min_coverage: float = Field(default=0.5, alias="ROUBAIX_SUFFICIENCY_MIN_COVERAGE")
+    sufficiency_min_supporting_ratio: float = Field(
+        default=0.34, alias="ROUBAIX_SUFFICIENCY_MIN_SUPPORTING_RATIO"
+    )
+    sufficiency_tier1_enabled: bool = Field(default=False, alias="ROUBAIX_SUFFICIENCY_TIER1")
+    sufficiency_tier1_threshold: float = Field(
+        default=0.5, alias="ROUBAIX_SUFFICIENCY_TIER1_THRESHOLD"
+    )
+
+    # Evidentiality-ordered packing (Phase B): when true, the packer orders
+    # items by query-term overlap before the token budget bites, so the budget
+    # cuts the least evidential items rather than the last-retrieved ones.
+    # One flag back to pure retrieval-rank order.
+    evidentiality_ordering: bool = Field(default=True, alias="ROUBAIX_EVIDENTIALITY_ORDERING")
+
+    # NodeSet derivation (Phase C1): optional JSON file mapping NodeSet name ->
+    # list of aliases. Absent file = no derivation, caller scope only.
+    nodeset_index_path: str | None = Field(default=None, alias="ROUBAIX_NODESET_INDEX_PATH")
+
     # When true, a freshness-required query must return evidence carrying a
     # parseable date. Without this the freshness contract is satisfied by any
     # non-empty result, which is how stale answers pass a freshness gate.

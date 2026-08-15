@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     langfuse_tracing.flush()
 
 
-app = FastAPI(title="Roubaix API", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="Roubaix API", version="0.5.0", lifespan=lifespan)
 
 
 @app.get("/healthz")

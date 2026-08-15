@@ -200,7 +200,10 @@ class DspyRouter(QueryRouter):
         self.llm_calls += 1
         return RouteDecision(
             mode=mode,
-            node_sets=list(request.node_sets),
+            # The baseline decision's scope, not the raw request scope: the
+            # deterministic stage may have derived NodeSets by entity anchoring,
+            # and the learned stage changes the MODE, not the scope.
+            node_sets=list(decision.node_sets),
             evidence_budget=_clamp_budget(prediction.evidence_budget),
             requires_freshness_validation=(
                 mode is SearchMode.TEMPORAL or request.freshness_required

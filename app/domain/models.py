@@ -87,6 +87,12 @@ class PackedEvidence(BaseModel):
     token_estimate: int = 0
     dropped_duplicates: int = 0
     dropped_over_budget: int = 0
+    best_dropped_evidentiality: float | None = Field(
+        default=None,
+        description="Highest evidentiality score among items the budget cut. "
+        "High values mean the budget is cutting things the sufficiency gate "
+        "wanted — the observable for tuning the token budget.",
+    )
     temporal_grounded: bool = Field(
         default=False,
         description="True when at least one packed item carries a parseable date. "

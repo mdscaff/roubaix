@@ -1,3 +1,5 @@
+import pytest
+
 from app.domain.models import RetrievalEvidence, RetrievalResult, SearchMode
 from app.services.evidence import EvidencePacker
 
@@ -88,3 +90,66 @@ def test_degraded_flag_propagates_from_retrieval_to_packed_evidence() -> None:
     packed = EvidencePacker().pack(result)
     assert packed.degraded is True
     assert packed.degraded_reason == "live_search_failed: RuntimeError"
+
+
+def test_budget_cuts_the_least_evidential_items_not_the_last_retrieved() -> None:
+    """Phase B: when the budget bites, the off-topic filler goes first even if
+    it was retrieved earlier — retrieval rank stops deciding what survives."""
+    packed = EvidencePacker().pack(
+        _result(
+            SearchMode.CHUNKS,
+            chunks=[
+                "completely unrelated filler about the cafeteria",
+                "more filler about office plants",
+                "billing exposes port 8443",
+            ],
+        ),
+        evidence_budget=1,
+        query_keywords=["billing", "port"],
+    )
+    assert packed.evidence_items == ["billing exposes port 8443"]
+    assert packed.dropped_over_budget == 2
+
+
+def test_retrieval_rank_is_the_tie_break_within_equal_scores() -> None:
+    packed = EvidencePacker().pack(
+        _result(SearchMode.CHUNKS, chunks=["first filler", "second filler"]),
+        query_keywords=["billing"],
+    )
+    assert packed.evidence_items == ["first filler", "second filler"]
+
+
+def test_no_keywords_preserves_pure_retrieval_order() -> None:
+    packed = EvidencePacker().pack(
+        _result(SearchMode.CHUNKS, chunks=["b then", "a first"]),
+    )
+    assert packed.evidence_items == ["b then", "a first"]
+
+
+def test_best_dropped_evidentiality_is_the_budget_tuning_observable() -> None:
+    """If a highly-evidential item was cut, the telemetry must say so —
+    that is the signal that the budget is fighting the sufficiency gate."""
+    packed = EvidencePacker().pack(
+        _result(
+            SearchMode.CHUNKS,
+            chunks=["billing exposes port 8443", "billing port details continued here"],
+        ),
+        evidence_budget=1,
+        query_keywords=["billing", "port"],
+    )
+    assert packed.dropped_over_budget == 1
+    assert packed.best_dropped_evidentiality is not None
+    assert packed.best_dropped_evidentiality > 0.5
+
+
+def test_evidentiality_ordering_can_be_disabled_by_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "evidentiality_ordering", False)
+    packed = EvidencePacker().pack(
+        _result(SearchMode.CHUNKS, chunks=["filler first", "billing port 8443"]),
+        query_keywords=["billing", "port"],
+    )
+    assert packed.evidence_items[0] == "filler first"  # rank order restored

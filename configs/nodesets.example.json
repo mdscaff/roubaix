@@ -1,0 +1,5 @@
+{
+  "billing": ["billing service", "invoices", "payments"],
+  "warehouse": ["data warehouse", "ingest", "ingestion pipeline"],
+  "auth": ["auth gateway", "identity provider", "login"]
+}
