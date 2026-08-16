@@ -198,7 +198,15 @@ trusted alone.
 
 ---
 
-## Phase D — Schema-constrained sub-question decomposition (escalation-only)
+## Phase D — Schema-constrained sub-question decomposition (escalation-only) — **DELIVERED (live validation pending)**
+
+Shipped in `app/services/decomposition.py` + orchestrator wiring: fires only
+when the controller escalates into GRAPH_COMPLETION, fan-out capped at 4,
+schema drawn from the NodeSet index, degraded sub-results dropped rather than
+blended, all-degraded merges degraded. The acceptance gate below (beat
+single-query GRAPH_COMPLETION on evidence recall at ≤1.5× token cost) **has
+not been run** — it needs the live stack, and no number is claimed until it
+is. Original design notes follow.
 
 Youtu-GraphRAG (ICLR 2026, arXiv:2508.19855; MIT-licensed repo) decomposes
 complex queries into parallel sub-queries **constrained by the graph's declared
@@ -265,6 +273,28 @@ Also refuted outright, and not to be relied on: both claims from arXiv
 2510.18633 on bandit-style sub-query exploration.
 
 ---
+
+## Live stack standup — measured boundary (2026-08-16)
+
+`scripts/live_stack.py` is the one-command standup. Probing the installed SDK
+(cognee 1.4.2) in an offline environment established exactly where "live"
+begins, and the script's preflight encodes it:
+
+| Step | Works offline? | Notes |
+|---|---|---|
+| `add` | **Yes** | given `s3fs` (now in the `opt` extra — cognee imports it even for local files), the embedded `turso` graph adapter (the default ladybug adapter downloads its JSON extension at first use, which fails behind restricted egress), and `COGNEE_SKIP_CONNECTION_TEST=true` |
+| `cognify` | **No** | entity extraction has no mock; without a working LLM it spins in litellm retries until timeout |
+| `search` | **No** | requires cognified data |
+| embeddings | mockable | `MOCK_EMBEDDING=true` runs the plumbing with fake vectors; every report from that mode is stamped `quality_meaningful: false` |
+
+So the single remaining prerequisite for live retrieval is an LLM key
+(`OPENROUTER_API_KEY` or `OPENAI_API_KEY`, plus `OPENAI_API_KEY` for real
+embeddings). With one present: `uv run --extra opt python scripts/live_stack.py`
+seeds the corpus and smoke-tests every mode through Roubaix's own client, so
+the degraded flag is honoured end-to-end. Then the deferred gates unlock, in
+order: Phase D's recall-vs-cost gate, the full-pipeline eval
+(`run_eval.py`, whose validity warnings will finally be empty), the scoping
+precision gate, and C2's label mining.
 
 ## Sequencing and dependencies
 

@@ -78,6 +78,8 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | Set-level sufficiency gate (Tier 0 lexical; Tier 1 MiniCheck via `verify` extra) | Working; acceptance gates encoded as losable tests |
 | Evidentiality-ordered packing + budget-pressure observable | Working; one flag back to rank order |
 | NodeSet derivation by entity anchoring (`ROUBAIX_NODESET_INDEX_PATH`) | Working; caller scope always wins |
+| Sub-question decomposition on GRAPH_COMPLETION escalations | Working; recall-vs-cost gate awaits the live stack |
+| Live stack bootstrap (`scripts/live_stack.py`) | Preflight + embedded profile + seeded smoke test; needs an LLM key to go live |
 | Cost accounting (measured vs estimated) | Working; no live run recorded |
 | Caller ceilings (`max_cost_cents`, `max_latency_ms`) | Working; cost trims the pack, latency stops the loop |
 | Stop-reason vocabulary + OTel `gen_ai.*` attributes | Working |
@@ -89,7 +91,7 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | AdalFlow | **Rejected** — see [ADR-003](docs/adr/ADR-003-reject-adalflow-keep-explicit-controller.md) |
 | Strands Agents SDK | **Patterns adopted, dependency refused** — see [ADR-004](docs/adr/ADR-004-evaluate-strands-adopt-patterns-not-dependency.md) |
 
-**157 tests passing** with the optional `opt` extra installed; 121 passing and the DSPy suite skipped without it, which is how CI runs. All dependencies current as of August 2026.
+**182 tests passing** with the optional `opt` extra installed; 121 passing and the DSPy suite skipped without it, which is how CI runs. All dependencies current as of August 2026.
 
 ## Quickstart
 
@@ -116,6 +118,21 @@ uv run --extra opt --extra pggraph python scripts/seed_cognee.py
 ```
 
 Note: the Postgres graph backend is a development convenience. Cognee documents it as a demo feature and directs production graph workloads to a graph-native backend, so numbers produced on it are not production-representative.
+
+### Stand up live Cognee
+
+```bash
+uv sync --extra opt
+uv run python scripts/live_stack.py --preflight-only   # names anything missing
+
+# With OPENROUTER_API_KEY / OPENAI_API_KEY set:
+uv run python scripts/live_stack.py                    # seed + smoke, stamped report
+```
+
+The preflight boundary is measured, not assumed: `add` runs fully offline with
+the embedded profile the script configures; `cognify` and `search` require one
+thing — a working LLM key. Reports produced with mock embeddings are stamped
+`quality_meaningful: false` and must not be quoted.
 
 ### Run evals
 

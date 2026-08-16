@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     # One flag back to pure retrieval-rank order.
     evidentiality_ordering: bool = Field(default=True, alias="ROUBAIX_EVIDENTIALITY_ORDERING")
 
+    # Sub-question decomposition (Phase D): runs only when the controller
+    # escalates into GRAPH_COMPLETION, needs the `opt` extra and a configured
+    # LM, and degrades to single-query retrieval on any failure.
+    decomposition_enabled: bool = Field(default=True, alias="ROUBAIX_DECOMPOSITION")
+
     # NodeSet derivation (Phase C1): optional JSON file mapping NodeSet name ->
     # list of aliases. Absent file = no derivation, caller scope only.
     nodeset_index_path: str | None = Field(default=None, alias="ROUBAIX_NODESET_INDEX_PATH")

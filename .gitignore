@@ -10,3 +10,5 @@ __pycache__/
 dist/
 evals/runs/
 artifacts/gepa_log/
+.cognee_live/
+evals/live/
