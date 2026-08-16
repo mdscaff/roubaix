@@ -2,6 +2,47 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.6.0] — 2026-08-16
+
+Phase D delivered; live-Cognee standup reduced to a single missing key.
+
+### Added
+
+- **Sub-question decomposition on GRAPH_COMPLETION escalations**
+  (`app/services/decomposition.py`). Escalation-only by design: a query the
+  router sent to GRAPH_COMPLETION directly routed cleanly and does not pay for
+  a decomposition call. Sub-queries are schema-constrained by the NodeSet
+  index, capped at 4, retrieved in parallel, and merged before packing.
+  Degraded sub-results are dropped, never blended — fabricated evidence would
+  be indistinguishable from live evidence after packing — and an all-degraded
+  merge fails closed exactly as a single degraded retrieval. The plan's
+  recall-vs-cost acceptance gate has not been run (needs the live stack) and
+  no number is claimed.
+- **`scripts/live_stack.py`** — one-command live standup with a preflight
+  whose failure modes were measured, not assumed: `add` works fully offline
+  (given `s3fs`, the embedded turso graph adapter, and skipping the connection
+  test); `cognify`/`search` require exactly one thing, a working LLM key.
+  Docker-less embedded profile (SQLite + LanceDB + turso), corpus seeding,
+  per-mode smoke through Roubaix's own client, stamped reports with
+  `quality_meaningful: false` whenever mock embeddings are in play. Exit 0
+  live-ready, exit 2 prerequisites missing; nothing half-starts.
+- `s3fs` declared in the `opt` extra — cognee's ingestion imports it even for
+  local files and does not declare it itself.
+
+### Observed while testing
+
+The Phase A sufficiency gate rejected an early Phase D test fixture whose fake
+sub-results did not cover the original query — the gates compose, and the
+fixture had to provide exactly what decomposition exists to provide.
+Fail-closed telemetry now carries `decomposed`/`subquery_count` so both exits
+tell the truth.
+
+### Still open
+
+Phase C2 (learned triple scorer) and every live-stack gate: Phase D
+recall-vs-cost, full-pipeline eval, scoping precision. All unlock with an LLM
+key via `scripts/live_stack.py`.
+
 ## [0.5.0] — 2026-08-15
 
 Phases A, B, and C1 of the research-backed implementation plan, built the same
