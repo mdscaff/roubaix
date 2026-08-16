@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     # One flag back to pure retrieval-rank order.
     evidentiality_ordering: bool = Field(default=True, alias="ROUBAIX_EVIDENTIALITY_ORDERING")
 
+    # Tier 0: the resident in-memory graph. Answers structural queries with
+    # zero tokens in microseconds; learns from every accepted non-degraded
+    # TRIPLET retrieval. See app/services/memgraph.py.
+    memgraph_enabled: bool = Field(default=True, alias="ROUBAIX_MEMGRAPH")
+    memgraph_max_nodes: int = Field(default=50_000, alias="ROUBAIX_MEMGRAPH_MAX_NODES")
+    # Optional warm-load file: JSON list of [subject, predicate, object].
+    memgraph_seed_path: str | None = Field(default=None, alias="ROUBAIX_MEMGRAPH_SEED_PATH")
+
     # Sub-question decomposition (Phase D): runs only when the controller
     # escalates into GRAPH_COMPLETION, needs the `opt` extra and a configured
     # LM, and degrades to single-query retrieval on any failure.

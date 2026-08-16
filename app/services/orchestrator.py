@@ -31,6 +31,8 @@ from app.observability.metrics import metrics
 from app.services.cache import ContentAddressedCache
 from app.services.decomposition import SubQueryDecomposer, build_decomposer, merge_results
 from app.services.evidence import EvidencePacker
+from app.services.graph_answerer import GraphAnswerer
+from app.services.memgraph import InMemoryGraph, build_graph
 from app.services.normalizer import QueryNormalizer
 from app.services.router import QueryRouter
 from app.services.runtime_controller import ControlAction, RuntimeController, StopReason
@@ -52,6 +54,7 @@ class QueryOrchestrator:
         normalizer: QueryNormalizer | None = None,
         cache: ContentAddressedCache | None = None,
         decomposer: SubQueryDecomposer | None = None,
+        graph: InMemoryGraph | None = None,
     ) -> None:
         self.router = router
         self.cognee_client = cognee_client
@@ -61,6 +64,8 @@ class QueryOrchestrator:
         self.normalizer = normalizer or QueryNormalizer()
         self.cache = cache or ContentAddressedCache()
         self.decomposer = decomposer if decomposer is not None else build_decomposer()
+        self.graph = graph if graph is not None else build_graph()
+        self.graph_answerer = GraphAnswerer(self.graph) if self.graph is not None else None
 
     async def answer(self, request: QueryRequest) -> AnswerResult:
         answer_start = perf_counter()
@@ -115,6 +120,53 @@ class QueryOrchestrator:
             )
 
         metrics.increment("cache:miss")
+
+        # --- Tier 0: the resident in-memory graph ---
+        # The fastest answer Roubaix can give: a traversal of a graph already
+        # in process memory. Zero tokens, zero cost, microseconds. Answers only
+        # when the structural pattern matches AND every entity resolves to a
+        # resident node; anything else falls through — the fast path's failure
+        # mode is "fell through", never "guessed". Not cached: it IS the fast
+        # tier, and caching it would only shadow graph updates.
+        if self.graph_answerer is not None:
+            tier0 = self.graph_answerer.try_answer(normalized)
+            if tier0 is not None:
+                metrics.increment("tier:memgraph")
+                total_ms = int((perf_counter() - answer_start) * 1000)
+                mode = (
+                    SearchMode.GRAPH_COMPLETION
+                    if tier0.pattern in ("path", "no_path")
+                    else SearchMode.TRIPLET_COMPLETION
+                )
+                return AnswerResult(
+                    answer=tier0.answer,
+                    accepted=True,
+                    route=RouteDecision(
+                        mode=mode,
+                        node_sets=list(request.node_sets),
+                        evidence_budget=len(tier0.edges),
+                        rationale=f"answered from resident graph ({tier0.pattern})",
+                        signals=["tier.memgraph", *tier0.signals],
+                    ),
+                    retrieval_mode=mode,
+                    retry_count=0,
+                    cache_hit=False,
+                    telemetry={
+                        "tier": "memgraph",
+                        "evidence_items": len(tier0.edges),
+                        "evidence": [e.as_text() for e in tier0.edges],
+                        "retrieval_ms": 0,
+                        "synthesis_ms": 0,
+                        "total_ms": total_ms,
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "estimated_cost_usd": 0.0,
+                        "cost_is_estimate": False,
+                        "graph_nodes": self.graph.node_count if self.graph else 0,
+                        "graph_edges": self.graph.edge_count if self.graph else 0,
+                    },
+                )
+        metrics.increment("tier:pipeline")
 
         # --- Layer 3: Route, retrieve, control ---
         retry_count = 0
@@ -331,6 +383,7 @@ class QueryOrchestrator:
             retry_count=retry_count,
             cache_hit=False,
             telemetry={
+                "tier": "pipeline",
                 "evidence_items": len(packed.evidence_items),
                 "evidence_tokens": packed.token_estimate,
                 "evidence_dropped_duplicates": packed.dropped_duplicates,
@@ -357,6 +410,24 @@ class QueryOrchestrator:
                 **cost.as_telemetry(),
             },
         )
+
+        # The slow path teaches the fast path: accepted, non-degraded triplet
+        # evidence is promoted into the resident graph, so the next structural
+        # query in this neighborhood answers in Tier 0 — the contract that a
+        # query which could not be fast makes its successors fast. Degraded
+        # evidence is never promoted: fabricated edges would make the fastest
+        # tier the least trustworthy one.
+        if (
+            self.graph is not None
+            and not packed.degraded
+            and route.mode is SearchMode.TRIPLET_COMPLETION
+        ):
+            promoted = self.graph.promote(
+                packed.evidence_items, provenance=f"{dataset}:{route.mode.value}"
+            )
+            if promoted:
+                metrics.increment("memgraph:promoted", promoted)
+                answer_result.telemetry["promoted_edges"] = promoted
 
         # Degraded answers are never cached: caching them would outlive the
         # outage that produced them. Answers produced with no LLM configured

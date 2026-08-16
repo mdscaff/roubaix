@@ -2,12 +2,20 @@
 
 ## Business value first
 
-Roubaix exists to improve four measurable outcomes:
+**Fast and cheapest is the product** — restated 2026-08-16 as the primary
+frame. In priority order:
 
-- lower cost per successful answer
-- lower latency per successful answer
-- higher quality on relationship-heavy and multi-hop queries
-- higher freshness accuracy on time-sensitive queries
+1. **Sub-second answers, ideally sub-millisecond.** The fastest tier that can
+   honestly answer, answers: cache, then a resident in-memory graph traversal
+   (zero tokens), then routed retrieval.
+2. **When an LLM must be paid, pay the fewest tokens** — cheapest valid
+   retrieval mode, token-budgeted evidentiality-ordered packing.
+3. **A slow first answer must buy fast subsequent answers.** The slow path
+   promotes relationship evidence into the resident graph; exact repeats hit
+   the cache; paraphrases hit the graph.
+
+The original four outcomes (cost per answer, latency, multi-hop quality,
+freshness accuracy) remain the measured surface of that frame.
 
 The central design choice is simple: **use the graph to retrieve and compress evidence, not to flood the prompt**.
 
@@ -133,6 +141,28 @@ Point 2 is stated as an intent rather than a result on purpose. The measured
 claim today is routing accuracy (85% held-out, +62 points over the best fixed
 mode); the cost claim is not yet measured against live retrieval. See
 [evaluation-plan.md](evaluation-plan.md).
+
+## Tier 0: the resident in-memory graph
+
+`app/services/memgraph.py` + `graph_answerer.py`. Structural queries — does A
+depend on B, what depends on X, how is A connected to B — answer by direct
+traversal of an adjacency-indexed triple store in process memory. Measured:
+p50 14µs per edge query, p50 0.19ms for the full orchestrator round trip, on
+a 2,005-node graph. Zero tokens; the evidence is the edge list itself.
+
+Rules that keep the fastest tier trustworthy:
+
+- **Falls through, never guesses**: answers only on a pattern match with every
+  entity resolving exactly (canonical stemmed match — no fuzzy resolution).
+- **Known entities with no connecting path is a finding** ("no connection
+  within 4 hops"), reported as such; an empty neighborhood is weak evidence
+  and falls through.
+- **Learns only from accepted, non-degraded evidence** — fabricated edges
+  would make the fastest tier the least trustworthy one.
+- **Bounded**: LRU node cap with consistent eviction of dangling references.
+- Node keys are canonicalized (stemmed, normalized) at insert, so the
+  Sensor/sensor/MEMSSensor duplication that emergent extraction produces
+  collapses before it enters the graph.
 
 ## Diagram summary
 

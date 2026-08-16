@@ -4,9 +4,17 @@ Cognee-centered graph retrieval with cost-aware routing, progressive escalation,
 
 ## Why this exists
 
-Roubaix routes every query to the **cheapest valid** Cognee retrieval mode before paying for graph depth. The goal is measurable outcomes: lower cost per answer, better multi-hop quality, freshness when it matters, and telemetry that survives scrutiny.
+**Fast and cheapest is the product.** Roubaix answers from the fastest tier that can honestly answer, and every slower tier exists only for queries the faster ones cannot serve:
 
-The design constraint that shapes everything else: **use the graph to retrieve and compress evidence, not to flood the prompt.**
+| Tier | What answers | Latency | Tokens |
+|---|---|---|---|
+| Cache | an identical earlier answer | sub-ms | 0 |
+| **Resident in-memory graph** | structural queries by direct traversal | **p50 0.19ms measured** (full round trip, in-process) | **0** |
+| Routed retrieval + synthesis | everything else, at the cheapest valid retrieval mode with token-budgeted evidence | provider-bound | minimized |
+
+The learning contract binds the tiers together: **a query that could not be fast must make its successors fast.** Accepted, non-degraded relationship evidence from the slow path is promoted into the resident graph, so the next structural query in that neighborhood answers in Tier 0 — differently phrased queries included, which exact-match caching can never serve.
+
+Two constraints shape everything else: **use the graph to retrieve and compress evidence, not to flood the prompt**, and **the fast path falls through, it never guesses** — Tier 0 answers only when the pattern matches and every entity resolves to a resident node, because a fast path that guesses is a wrong-answer generator with excellent latency.
 
 ## What is actually measured
 
@@ -14,6 +22,8 @@ Routing is the one part of the pipeline that can be measured honestly without a 
 
 | Metric | Value | How to read it |
 |---|---|---|
+| Tier-0 answer, full orchestrator round trip | **p50 0.19ms / p99 0.35ms** | Measured in-process on a 2,005-node resident graph (no HTTP layer; FastAPI adds overhead but not orders of magnitude). Zero tokens, zero cost — and the zero is measured, not estimated. |
+| Tier-0 raw traversal (edge query) | p50 14µs / p99 47µs | The graph answerer alone, same graph. |
 | Routing accuracy, **held-out** corpus (n=26) | **85%** | The honest number. These queries were written without reference to the router's patterns and have not been tuned against. |
 | Routing accuracy, tuning corpus (n=20) | 100% | An upper bound, not a measurement. The rules were written against this corpus. |
 | Best single fixed mode, held-out | 23% | What "always pick the commonest mode" scores. The router's lift is **+62 points**. |
@@ -70,6 +80,7 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 
 | Component | Status |
 |---|---|
+| **Tier 0: resident in-memory graph** (edge/path/neighbor queries, promotion from slow path, LRU-bounded) | Working; p50 0.19ms measured |
 | Scored router + cost-rank tie-break + negation handling | Working, gated in CI |
 | Content-addressed cache (LRU + TTL) | Working; key covers query, dataset, freshness, scope, model, policy version |
 | Cognee retrieval | Live SDK when configured; flagged-degraded stub otherwise |
@@ -91,7 +102,7 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | AdalFlow | **Rejected** — see [ADR-003](docs/adr/ADR-003-reject-adalflow-keep-explicit-controller.md) |
 | Strands Agents SDK | **Patterns adopted, dependency refused** — see [ADR-004](docs/adr/ADR-004-evaluate-strands-adopt-patterns-not-dependency.md) |
 
-**182 tests passing** with the optional `opt` extra installed; 121 passing and the DSPy suite skipped without it, which is how CI runs. All dependencies current as of August 2026.
+**198 tests passing** with the optional `opt` extra installed; 121 passing and the DSPy suite skipped without it, which is how CI runs. All dependencies current as of August 2026.
 
 ## Quickstart
 

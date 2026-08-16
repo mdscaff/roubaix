@@ -101,7 +101,7 @@ _NON_ALPHA = re.compile(r"[^a-z0-9\s]")
 # Bumped whenever routing rules, evidence packing, or the synthesis prompt
 # change in a way that invalidates previously cached answers. Included in every
 # cache key so a deploy cannot serve answers produced under an older policy.
-POLICY_VERSION = "3"
+POLICY_VERSION = "4"
 
 
 class QueryNormalizer:

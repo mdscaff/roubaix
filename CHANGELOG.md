@@ -2,6 +2,43 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.7.0] — 2026-08-16
+
+The problem statement, restated and rebuilt around: **fast and cheapest is
+the product.** Sub-second whenever possible, fewest tokens when an LLM must be
+paid, and a query that could not be fast must make its successors fast.
+
+### Added
+
+- **Tier 0: a resident in-memory graph** (`app/services/memgraph.py` +
+  `graph_answerer.py`), checked after the cache and before routing.
+  Structural queries — does A depend on B, what depends on X, how is A
+  connected to B — answer by direct traversal: zero tokens, zero cost, and
+  the zero is measured, not estimated. **Measured: p50 14µs per edge query;
+  p50 0.19ms / p99 0.35ms full orchestrator round trip** on a 2,005-node
+  graph, in-process.
+- **The learning contract, implemented.** Accepted, non-degraded triplet
+  evidence from the slow path is promoted into the resident graph
+  (canonicalized, deduplicated, LRU-bounded with consistent eviction), so a
+  differently-phrased structural follow-up — which exact-match caching can
+  never serve — answers in Tier 0. Covered by an end-to-end test:
+  first query pays for retrieval, second answers at tier=memgraph with
+  input_tokens=0.
+- Tier telemetry (`tier: memgraph|pipeline`), graph size gauges, promotion
+  counts; `POLICY_VERSION` → 4 so pre-Tier-0 cached answers are not served
+  under the new policy.
+
+### Rules that keep the fastest tier trustworthy
+
+Falls through, never guesses (pattern must match AND every entity must
+resolve exactly — no fuzzy resolution); known-entities-with-no-path is an
+honest finding while an empty neighborhood falls through; degraded evidence
+is never promoted; node keys are canonicalized at insert so emergent
+extraction's Sensor/sensor/MEMSSensor duplication collapses before entering
+the graph — a lesson taken directly from the prior CXR ontology effort, whose
+hand-authored OWL was never actually wired in and whose induction plan
+existed largely to undo entity duplication.
+
 ## [0.6.1] — 2026-08-16
 
 ### Changed
