@@ -91,8 +91,27 @@ class QueryOrchestrator:
         )
         request.content_key = cache_key
         cached = self.cache.get(cache_key)
+        cache_hit_kind = "exact"
+        if cached is None and not request.freshness_required:
+            # Second chance: the paraphrase-collapsed key. Serves "does billing
+            # depend on the warehouse" from a cached "does billing depend on
+            # warehouse" — same content words, same order; only function words
+            # and morphology differ. Freshness-required requests never consult
+            # this namespace, and freshness-validated answers are never written
+            # to it (see the put below), so the interlock holds on both sides.
+            cached = self.cache.get(
+                self.normalizer.paraphrase_content_key(
+                    request.query,
+                    dataset,
+                    node_sets=request.node_sets,
+                    model=self.synthesizer.model,
+                    user_id=request.user_id,
+                )
+            )
+            cache_hit_kind = "paraphrase"
         if cached is not None:
             metrics.increment("cache:hit")
+            metrics.increment(f"cache:hit:{cache_hit_kind}")
             total_ms = int((perf_counter() - answer_start) * 1000)
             return cast(
                 AnswerResult,
@@ -102,6 +121,7 @@ class QueryOrchestrator:
                         "telemetry": {
                             **cached.telemetry,
                             "cache_hit": True,
+                            "cache_hit_kind": cache_hit_kind,
                             "total_ms": total_ms,
                             "retrieval_ms": 0,
                             "synthesis_ms": 0,
@@ -440,6 +460,22 @@ class QueryOrchestrator:
                 answer_result,
                 freshness_sensitive=route.requires_freshness_validation,
             )
+            # The paraphrase namespace is the pre-committed interlock's
+            # territory: no freshness-sensitive answer enters it — neither a
+            # caller-declared freshness contract nor a router-derived temporal
+            # route — because the paraphrase form forgives auxiliary words,
+            # and with them tense. Scope/model/caller stay in the key itself.
+            if not request.freshness_required and not route.requires_freshness_validation:
+                self.cache.put(
+                    self.normalizer.paraphrase_content_key(
+                        request.query,
+                        dataset,
+                        node_sets=request.node_sets,
+                        model=self.synthesizer.model,
+                        user_id=request.user_id,
+                    ),
+                    answer_result,
+                )
         return answer_result
 
     def _schema_for_decomposition(self) -> list[str]:

@@ -29,8 +29,9 @@ Routing is the one part of the pipeline that can be measured honestly without a 
 | Best single fixed mode, held-out | 23% | What "always pick the commonest mode" scores. The router's lift is **+62 points**. |
 | Accuracy when the router reports confidence | 93% | 58% of traffic. |
 | Accuracy when the router reports **low** confidence | 73% | 42% of traffic, holding 3 of the 4 misses. This is the band the DSPy stage serves. |
+| NodeSet scoping precision (Phase C1 gate) | **92%** (gate: ≥70%) | Hand-labelled 34-row extension of the held-out corpus, measured through the real router wiring. Labels and index share an author — judgment-anchored, not blind, and the corpus pins known failure modes so they can't be papered over. Recall (also 92%) is reported, not gated: misses are Phase C2's territory. |
 
-Reproduce with `uv run python scripts/eval_routing.py`. It needs no Cognee instance, no LLM, and no network — routing is a pure function of the query, which is why it is the one metric gated in CI.
+Reproduce with `uv run python scripts/eval_routing.py` and `uv run python scripts/eval_scoping.py`. Neither needs a Cognee instance, an LLM, or the network — routing and scoping are pure functions of the query, which is why they are the two metrics gated in CI.
 
 The four held-out misses are listed in [docs/evaluation-plan.md](docs/evaluation-plan.md) and are deliberately **not** fixed. Tuning the rules until the held-out corpus scores 100% would turn the only unbiased measurement in this repo into a restatement of the rules.
 
@@ -82,6 +83,9 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 |---|---|
 | **Tier 0: resident in-memory graph** (edge/path/neighbor queries, promotion from slow path, LRU-bounded) | Working; p50 0.19ms measured |
 | Tier-0 warm-load from Cognee's graph store at startup (+ optional seed file) | Working; skips honestly when no store exists; `/healthz` reports resident size |
+| Tier-0 persistence across restarts (`ROUBAIX_MEMGRAPH_SNAPSHOT_PATH`) | Working; atomic snapshot at shutdown, restore at startup — promotion learning survives the process |
+| Paraphrase second-chance cache (stemmed keywords, order preserved) | Working; interlocked — never on freshness routes, never across scope/tenant/model; collision contract is a losable test table |
+| NodeSet derivation precision gate (Phase C1 acceptance) | **Run: 92% precision** (gate ≥70%), caller-scope invariant holds; gated in CI |
 | Scored router + cost-rank tie-break + negation handling | Working, gated in CI |
 | Content-addressed cache (LRU + TTL) | Working; key covers query, dataset, freshness, scope, model, policy version |
 | Cognee retrieval | Live SDK when configured; flagged-degraded stub otherwise |
@@ -103,7 +107,7 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | AdalFlow | **Rejected** — see [ADR-003](docs/adr/ADR-003-reject-adalflow-keep-explicit-controller.md) |
 | Strands Agents SDK | **Patterns adopted, dependency refused** — see [ADR-004](docs/adr/ADR-004-evaluate-strands-adopt-patterns-not-dependency.md) |
 
-**202 tests passing** with the optional `opt` extra installed; 183 passing (1 skipped) without it, which is how CI runs. All dependencies current as of August 2026.
+**217 tests passing** with the optional `opt` extra installed; 198 passing (1 skipped) without it, which is how CI runs. All dependencies current as of August 2026.
 
 ## Quickstart
 

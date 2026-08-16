@@ -1,0 +1,9 @@
+{
+  "payments": ["billing", "checkout", "ledger", "payment worker", "invoices"],
+  "search": ["search indexer", "search service", "query engine"],
+  "observability": ["metrics endpoint", "audit log", "tracing", "monitoring", "dashboards"],
+  "identity": ["identity provider", "auth gateway", "login", "sso"],
+  "messaging": ["notification service", "job queue", "scheduler", "email sender"],
+  "platform": ["shared config service", "edge layer", "v1 api", "service catalog"],
+  "reporting": ["reporting service", "customer database", "analytics"]
+}

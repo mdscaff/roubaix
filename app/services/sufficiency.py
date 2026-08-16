@@ -52,22 +52,10 @@ from app.services.normalizer import QueryNormalizer
 
 logger = logging.getLogger(__name__)
 
-# Crude suffix stripper so "expose" matches "exposes" and "depend" matches
-# "depends"/"depended". Deliberately not a real stemmer: three suffixes and a
-# minimum stem length, because a heavier stemmer buys little at this
-# granularity and introduces its own false merges. "es" is deliberately NOT in
-# the list — stripping it maps "exposes"→"expos" while "expose" stays intact,
-# so the variants stop colliding, which defeats the purpose; stripping bare
-# "s" maps both to "expose".
-_SUFFIXES = ("ing", "ed", "s")
-_MIN_STEM = 3
-
-
-def _stem(token: str) -> str:
-    for suffix in _SUFFIXES:
-        if token.endswith(suffix) and len(token) - len(suffix) >= _MIN_STEM:
-            return token[: -len(suffix)]
-    return token
+# _stem's canonical home is the normalizer (the cache's paraphrase key needs
+# it, and the normalizer must not import from here). Re-exported so existing
+# importers (memgraph, scoping, tests) keep working unchanged.
+from app.services.normalizer import _stem  # noqa: E402 - re-export
 
 
 class SufficiencyVerdict(StrEnum):

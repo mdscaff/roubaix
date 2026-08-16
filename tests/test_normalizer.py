@@ -109,3 +109,59 @@ def test_content_key_varies_by_policy_version() -> None:
     assert n.content_key(nq, "default", policy_version="1") != n.content_key(
         nq, "default", policy_version="2"
     )
+
+
+# --- the paraphrase form: a losable collision table ---------------------------
+# Each pair encodes a promise. MUST_COLLIDE pairs differ only in function words
+# or morphology — serving one from the other's cache entry is correct.
+# MUST_NOT_COLLIDE pairs differ in meaning — a collision would serve a wrong
+# answer at cache speed, which is the worst failure mode this system has.
+
+MUST_COLLIDE = [
+    ("Does billing depend on the warehouse?", "does billing depend on warehouse"),
+    ("Which team owns the notification service?", "which teams own the notification services"),
+    ("Is the checkout service linked to billing?", "is checkout service linked to billing"),
+    ("did the scheduler call the job queue", "does a scheduler call the job queue"),
+]
+
+MUST_NOT_COLLIDE = [
+    # Inversion: same words, opposite question.
+    ("Does billing depend on the warehouse?", "Does the warehouse depend on billing?"),
+    # Negation: "not" is deliberately not a stop word.
+    ("Is billing connected to the warehouse?", "Is billing not connected to the warehouse?"),
+    # Different entity.
+    ("Does billing depend on the warehouse?", "Does billing depend on the ledger?"),
+    # Different relation.
+    ("Does billing depend on the warehouse?", "Does billing write to the warehouse?"),
+]
+
+
+def test_paraphrase_form_collides_exactly_where_promised() -> None:
+    n = QueryNormalizer()
+    for a, b in MUST_COLLIDE:
+        assert n.paraphrase_form(a) == n.paraphrase_form(b), (a, b)
+    for a, b in MUST_NOT_COLLIDE:
+        assert n.paraphrase_form(a) != n.paraphrase_form(b), (a, b)
+
+
+def test_paraphrase_key_is_disjoint_from_exact_keys() -> None:
+    """Even a stopword-free, unstemmable query must not cross namespaces."""
+    n = QueryNormalizer()
+    q = "ledger warehouse"
+    assert n.paraphrase_form(q) == n.normalize(q)  # the collision precondition
+    assert n.paraphrase_content_key(q, "default") != n.content_key(n.normalize(q), "default")
+
+
+def test_paraphrase_key_preserves_scope_model_and_caller_boundaries() -> None:
+    n = QueryNormalizer()
+    q = "does billing depend on warehouse"
+    assert n.paraphrase_content_key(q, "ds_a") != n.paraphrase_content_key(q, "ds_b")
+    assert n.paraphrase_content_key(q, "d", node_sets=["a"]) != n.paraphrase_content_key(
+        q, "d", node_sets=["b"]
+    )
+    assert n.paraphrase_content_key(q, "d", model="m1") != n.paraphrase_content_key(
+        q, "d", model="m2"
+    )
+    assert n.paraphrase_content_key(q, "d", user_id="u1") != n.paraphrase_content_key(
+        q, "d", user_id="u2"
+    )

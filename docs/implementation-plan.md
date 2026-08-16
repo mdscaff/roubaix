@@ -172,11 +172,22 @@ outperforming GNN/LLM/heuristic retrievers (WebQSP triple recall ~0.883 vs RoG
 
 Staged to match what Roubaix actually has:
 
-1. **C1 — lexical entity anchoring — DELIVERED** (`app/services/scoping.py`:
-   alias index from `ROUBAIX_NODESET_INDEX_PATH`, stemmed token-exact matching,
-   caller scope always wins, `node_name_filter_operator="OR"` set explicitly,
-   POLICY_VERSION bumped). The scoping-precision acceptance gate below still
-   needs a scoping-labelled corpus extension — not yet run. Original notes: Maintain a NodeSet name/alias index
+1. **C1 — lexical entity anchoring — DELIVERED, gate RUN (2026-08-16)**
+   (`app/services/scoping.py`: alias index from `ROUBAIX_NODESET_INDEX_PATH`,
+   stemmed token-exact matching, caller scope always wins,
+   `node_name_filter_operator="OR"` set explicitly, POLICY_VERSION bumped).
+   **Acceptance gate result: 92% precision / 92% recall (gate: ≥70%
+   precision), caller-scope invariant holds** — on the scoping-labelled
+   extension of the held-out corpus (`evals/queries_scoping.jsonl`, 34 rows,
+   `evals/nodesets_eval.json`), measured through `QueryRouter.route` with the
+   index injected, gated in CI via `scripts/eval_scoping.py --min-precision
+   0.70`. Caveat stated in the eval module: labels and index share an author,
+   so this is judgment-anchored, not blind. The corpus pins the matcher's
+   known failure modes so they cannot be papered over: verb/name collisions
+   (`sc-trap-003/004`) count against precision, lexical gaps
+   (`sc-recall-001/002`) against recall, and a test fails if relabelling ever
+   "fixes" them without a mechanism change — recall is Phase C2's territory.
+   Original notes: Maintain a NodeSet name/alias index
    from Cognee dataset metadata; match query keywords against it (the earlier
    research pass already found lexical beats dense embeddings for exactly this
    kind of scoping); emit matched NodeSets on `RouteDecision.node_sets` with a

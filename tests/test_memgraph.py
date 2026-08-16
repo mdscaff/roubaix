@@ -234,6 +234,54 @@ async def test_degraded_evidence_is_never_promoted() -> None:
     assert graph.edge_count == 0
 
 
+# --- snapshot persistence: learning must survive restarts --------------------
+
+
+def test_snapshot_round_trip_preserves_edges_and_provenance(tmp_path: object) -> None:
+    from pathlib import Path
+
+    from app.services.memgraph import load_snapshot, save_snapshot
+
+    snap = str(Path(str(tmp_path)) / "nested" / "graph.json")  # parent dir is created
+    original = _graph()
+    assert save_snapshot(original, snap) == 3
+
+    restored = InMemoryGraph()
+    assert load_snapshot(restored, snap) == 3
+    assert restored.edge_count == original.edge_count
+    edges = restored.edges_between("billing", "warehouse")
+    assert edges and edges[0].provenance == "test"
+    # The restored graph answers exactly as the original would.
+    result = GraphAnswerer(restored).try_answer("how is checkout connected to ledger")
+    assert result is not None and result.pattern == "path"
+
+
+def test_snapshot_load_dedups_against_already_resident_edges(tmp_path: object) -> None:
+    from pathlib import Path
+
+    from app.services.memgraph import load_snapshot, save_snapshot
+
+    snap = str(Path(str(tmp_path)) / "graph.json")
+    save_snapshot(_graph(), snap)
+    target = _graph()  # already holds the same three edges
+    assert load_snapshot(target, snap) == 0
+    assert target.edge_count == 3
+
+
+def test_snapshot_failures_never_raise(tmp_path: object) -> None:
+    """Missing file, malformed file: log-and-zero, never a startup crash."""
+    from pathlib import Path
+
+    from app.services.memgraph import load_snapshot
+
+    graph = InMemoryGraph()
+    assert load_snapshot(graph, str(Path(str(tmp_path)) / "absent.json")) == 0
+    bad = Path(str(tmp_path)) / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    assert load_snapshot(graph, str(bad)) == 0
+    assert graph.edge_count == 0
+
+
 # --- warm-load from Cognee's graph store -------------------------------------
 
 

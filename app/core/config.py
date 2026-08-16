@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     memgraph_max_nodes: int = Field(default=50_000, alias="ROUBAIX_MEMGRAPH_MAX_NODES")
     # Optional warm-load file: JSON list of [subject, predicate, object].
     memgraph_seed_path: str | None = Field(default=None, alias="ROUBAIX_MEMGRAPH_SEED_PATH")
+    # Optional persistence: when set, the resident graph is snapshotted here at
+    # shutdown and restored at startup, so edges learned via promotion survive
+    # restarts. Without it the learning contract silently resets per process.
+    memgraph_snapshot_path: str | None = Field(default=None, alias="ROUBAIX_MEMGRAPH_SNAPSHOT_PATH")
 
     # Sub-question decomposition (Phase D): runs only when the controller
     # escalates into GRAPH_COMPLETION, needs the `opt` extra and a configured

@@ -197,6 +197,15 @@ class InMemoryGraph:
     def edge_count(self) -> int:
         return sum(len(n.out_edges) for n in self._nodes.values())
 
+    def dump_edges(self) -> list[Edge]:
+        """Every resident edge, in node LRU order (least recent first).
+
+        The order is deliberate: reloading a snapshot inserts edges in this
+        order, so the most recently used neighborhoods are inserted last and
+        inherit the freshest LRU position in the restored graph.
+        """
+        return [e for node in self._nodes.values() for e in node.out_edges]
+
     # --- internals -----------------------------------------------------------
 
     def _node(self, label: str) -> _Node:
@@ -274,6 +283,76 @@ class GraphDataEngine(Protocol):
     async def get_graph_data(
         self,
     ) -> tuple[list[tuple[Any, dict[str, Any]]], list[tuple[Any, Any, Any, dict[str, Any]]]]: ...
+
+
+_SNAPSHOT_VERSION = 1
+
+
+def save_snapshot(graph: InMemoryGraph, path: str) -> int:
+    """Persist the resident graph to *path* atomically. Returns edges written.
+
+    Without this, everything the graph learned from promotion dies with the
+    process, and the learning contract — a query that had to be slow makes its
+    successors fast — silently resets at every restart. The write is
+    tmp-then-rename so a crash mid-write can never leave a torn snapshot; a
+    failed save is logged and returns 0, never raised — persistence is an
+    enhancement, and a full disk must not take down shutdown.
+    """
+    import json
+    import logging
+    import os
+    from pathlib import Path
+
+    edges = [[e.subject, e.predicate, e.object, e.provenance] for e in graph.dump_edges()]
+    payload = {"version": _SNAPSHOT_VERSION, "edges": edges}
+    try:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        os.replace(tmp, target)
+    except Exception as exc:  # noqa: BLE001 - enhancement, never a validation
+        logging.getLogger(__name__).warning(
+            "memgraph_snapshot_save_failed", extra={"path": path, "error": str(exc)}
+        )
+        return 0
+    logging.getLogger(__name__).info(
+        "memgraph_snapshot_saved", extra={"path": path, "edges": len(edges)}
+    )
+    return len(edges)
+
+
+def load_snapshot(graph: InMemoryGraph, path: str) -> int:
+    """Restore a snapshot into *graph*. Returns edges actually added.
+
+    Every edge flows through ``add_edge`` with its original provenance, so
+    canonicalization, dedup, junk rejection, and the LRU bound apply to
+    restored edges exactly as to promoted ones. A missing or malformed file
+    logs and returns 0 — the graph still starts and learns from scratch.
+    """
+    import json
+    import logging
+    from pathlib import Path
+
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        rows = payload["edges"]
+        loaded = sum(
+            graph.add_edge(str(r[0]), str(r[1]), str(r[2]), provenance=str(r[3]))
+            for r in rows
+            if isinstance(r, (list, tuple)) and len(r) >= 4
+        )
+    except FileNotFoundError:
+        return 0  # first boot; not even worth a log line
+    except Exception as exc:  # noqa: BLE001 - enhancement, never a validation
+        logging.getLogger(__name__).warning(
+            "memgraph_snapshot_unreadable", extra={"path": path, "error": str(exc)}
+        )
+        return 0
+    logging.getLogger(__name__).info(
+        "memgraph_snapshot_loaded", extra={"path": path, "edges": loaded}
+    )
+    return loaded
 
 
 async def warm_load_from_cognee(graph: InMemoryGraph, engine: GraphDataEngine | None = None) -> int:

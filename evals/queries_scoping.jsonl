@@ -1,0 +1,40 @@
+# Scoping-labelled extension of the held-out corpus (Phase C1 acceptance gate).
+# expected_node_sets = the NodeSets a human says the query is about, given the
+# index in nodesets_eval.json. Labels record human judgment, NOT what the
+# lexical matcher can do — rows the matcher is known to miss (sc-recall-*) and
+# rows where it is known to misfire (sc-trap-003/004) are labelled by judgment
+# anyway, so precision and recall stay measurements rather than restatements.
+{"query_id": "ho-fact-001", "query": "What is the retry limit for the payment worker?", "expected_node_sets": ["payments"]}
+{"query_id": "ho-fact-002", "query": "How much memory does the search indexer request?", "expected_node_sets": ["search"]}
+{"query_id": "ho-fact-003", "query": "What format does the audit log use?", "expected_node_sets": ["observability"]}
+{"query_id": "ho-fact-004", "query": "Which port is reserved for the internal metrics endpoint?", "expected_node_sets": ["observability"]}
+{"query_id": "ho-rel-001", "query": "Which team owns the notification service?", "expected_node_sets": ["messaging"]}
+{"query_id": "ho-rel-002", "query": "What is the relationship between the scheduler and the job queue?", "expected_node_sets": ["messaging"]}
+{"query_id": "ho-rel-003", "query": "Is the reporting service linked to the customer database?", "expected_node_sets": ["reporting"]}
+{"query_id": "ho-rel-004", "query": "Which upstream services call the identity provider?", "expected_node_sets": ["identity"]}
+{"query_id": "ho-multi-001", "query": "If the identity provider goes down, what stops working?", "expected_node_sets": ["identity"]}
+{"query_id": "ho-multi-002", "query": "What is the full path from a checkout request to the ledger?", "expected_node_sets": ["payments"]}
+{"query_id": "ho-multi-003", "query": "Show everything transitively dependent on the shared config service.", "expected_node_sets": ["platform"]}
+{"query_id": "ho-multi-004", "query": "Which teams would be impacted by deprecating the v1 API?", "expected_node_sets": ["platform"]}
+{"query_id": "ho-summary-001", "query": "Give me a high level picture of the payments domain.", "expected_node_sets": ["payments"]}
+{"query_id": "ho-summary-002", "query": "Summarise what our observability stack does.", "expected_node_sets": ["observability"]}
+{"query_id": "ho-summary-003", "query": "How is the platform team's ownership structured?", "expected_node_sets": ["platform"]}
+{"query_id": "ho-summary-004", "query": "Explain how a request travels through the edge layer.", "expected_node_sets": ["platform"]}
+{"query_id": "ho-struct-001", "query": "Cypher: list services with no outgoing edges.", "expected_node_sets": []}
+{"query_id": "ho-struct-002", "query": "How many nodes are in the billing subgraph?", "expected_node_sets": ["payments"]}
+{"query_id": "ho-struct-003", "query": "Match every service annotated as tier one.", "expected_node_sets": []}
+{"query_id": "ho-struct-004", "query": "Find all edges of type owns between teams and services.", "expected_node_sets": []}
+{"query_id": "ho-temp-001", "query": "What deployments happened in the past week?", "expected_node_sets": []}
+{"query_id": "ho-temp-002", "query": "Is the checkout outage still ongoing right now?", "expected_node_sets": ["payments"]}
+{"query_id": "ho-temp-003", "query": "Give me the most recent schema migration.", "expected_node_sets": []}
+{"query_id": "ho-temp-004", "query": "What has changed since the last release?", "expected_node_sets": []}
+{"query_id": "ho-ambig-001", "query": "Tell me about payments.", "expected_node_sets": ["payments"]}
+{"query_id": "ho-ambig-002", "query": "Anything I should know?", "expected_node_sets": []}
+{"query_id": "sc-trap-001", "query": "Who is the author of the deployment guide?", "expected_node_sets": [], "notes": "'author' must not fire 'auth' — the substring bug class, again."}
+{"query_id": "sc-trap-002", "query": "Which services support the loyalty program?", "expected_node_sets": [], "notes": "'support' must not fire 'port'-style substrings."}
+{"query_id": "sc-trap-003", "query": "Can you search the changelog for breaking changes?", "expected_node_sets": [], "notes": "Known misfire: 'search' as a verb collides with the search NodeSet's own name. Labelled by judgment so it counts against precision."}
+{"query_id": "sc-trap-004", "query": "Which mobile platform do we support?", "expected_node_sets": [], "notes": "Known misfire: generic word as NodeSet name. Counts against precision."}
+{"query_id": "sc-recall-001", "query": "How do we log in to the admin console?", "expected_node_sets": ["identity"], "notes": "Known lexical gap: 'log in' vs the alias 'login'. Counts against recall."}
+{"query_id": "sc-recall-002", "query": "Does checkout emit metrics?", "expected_node_sets": ["payments", "observability"], "notes": "'metrics' alone does not satisfy the two-token alias 'metrics endpoint'. Counts against recall."}
+{"query_id": "sc-multi-001", "query": "Is the auth gateway behind the edge layer?", "expected_node_sets": ["identity", "platform"]}
+{"query_id": "sc-hit-001", "query": "What happened to the login page yesterday?", "expected_node_sets": ["identity"]}

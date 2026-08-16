@@ -2,6 +2,58 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.9.0] — 2026-08-16
+
+Every remaining phase that can run without live egress, run. What still
+needs the live stack (Phase D's recall-vs-cost gate, C2 label mining, the
+GEPA compile) stays honestly blocked and documented, not simulated.
+
+### Added
+
+- **Phase C1 acceptance gate, RUN: 92% precision / 92% recall** (gate ≥70%
+  precision) on a new scoping-labelled extension of the held-out corpus
+  (`evals/queries_scoping.jsonl`, 34 rows + `evals/nodesets_eval.json`),
+  measured through the real `QueryRouter.route` wiring and gated in CI
+  (`scripts/eval_scoping.py --min-precision 0.70`). Precision is gated
+  because a false scope hides evidence; recall is reported, not gated — it
+  is Phase C2's territory. The corpus pins known failure modes (verb/name
+  collisions misfire, lexical gaps miss) and a test fails if relabelling
+  ever "fixes" them without a mechanism change. Caveat stated in the module:
+  labels and index share an author — judgment-anchored, not blind.
+- **Resident-graph persistence** (`save_snapshot`/`load_snapshot`,
+  `ROUBAIX_MEMGRAPH_SNAPSHOT_PATH`): the graph is snapshotted atomically
+  (tmp-then-rename) at shutdown and restored at startup. Without it,
+  everything Tier 0 learned via promotion died with the process — the
+  learning contract silently reset at every restart. Restored edges flow
+  through `add_edge` (canonicalization, dedup, junk rejection, LRU bound),
+  and snapshot order preserves LRU recency across the restart. Failures
+  log-and-skip in both directions; persistence is an enhancement.
+- **Paraphrase second-chance cache lookup**: a new cache key over the
+  paraphrase-collapsed form (stemmed keywords, stop words dropped, **order
+  preserved**), consulted only after an exact miss. "Does billing depend on
+  the warehouse?" now serves from a cached "does billing depend on
+  warehouse" — zero retrieval, zero tokens. Pre-committed interlocks from
+  the research phase hold on both sides: freshness-required requests never
+  consult the namespace, freshness-validated answers (caller-declared *or*
+  router-derived temporal) are never written to it, and dataset / NodeSet
+  scope / model / caller / policy version all remain in the key, so a hit
+  can never cross a tenant, scope, or model boundary. Inversion survives by
+  order; negation survives because "not" is not a stop word. The collision
+  contract is encoded as a losable must-collide / must-not-collide table in
+  the tests. Telemetry reports `cache_hit_kind: exact|paraphrase`.
+
+### Changed
+
+- `_stem` moved to its canonical home in `app/services/normalizer.py`
+  (re-exported from `sufficiency` for existing importers) — the cache's
+  paraphrase key needs it and the normalizer must not import upward.
+
+### Still blocked on live egress + an LLM key (unchanged, deliberate)
+
+Phase D's recall-vs-cost gate, the full-pipeline eval, C2's label mining,
+and the GEPA compile-then-judge run. `scripts/live_stack.py` preflight names
+the binding constraint per check.
+
 ## [0.8.0] — 2026-08-16
 
 Tier 0 no longer starts cold, and the tier model is demonstrable end to end

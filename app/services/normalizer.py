@@ -98,6 +98,24 @@ _STOP_WORDS = frozenset(
 
 _NON_ALPHA = re.compile(r"[^a-z0-9\s]")
 
+# Crude suffix stripper so "expose" matches "exposes" and "depend" matches
+# "depends"/"depended". Deliberately not a real stemmer: three suffixes and a
+# minimum stem length, because a heavier stemmer buys little at this
+# granularity and introduces its own false merges. "es" is deliberately NOT in
+# the list — stripping it maps "exposes"→"expos" while "expose" stays intact,
+# so the variants stop colliding, which defeats the purpose; stripping bare
+# "s" maps both to "expose".
+_STEM_SUFFIXES = ("ing", "ed", "s")
+_MIN_STEM = 3
+
+
+def _stem(token: str) -> str:
+    for suffix in _STEM_SUFFIXES:
+        if token.endswith(suffix) and len(token) - len(suffix) >= _MIN_STEM:
+            return token[: -len(suffix)]
+    return token
+
+
 # Bumped whenever routing rules, evidence packing, or the synthesis prompt
 # change in a way that invalidates previously cached answers. Included in every
 # cache key so a deploy cannot serve answers produced under an older policy.
@@ -131,6 +149,26 @@ class QueryNormalizer:
         """
         return " ".join(sorted(self.keywords(query)))
 
+    def paraphrase_form(self, query: str) -> str:
+        """Return the paraphrase-collapsed form: stemmed keywords, order kept.
+
+        The conservative middle ground between ``normalize`` (too strict:
+        "does billing depend on the warehouse" and "does billing depend on
+        warehouse" miss each other) and ``fingerprint`` (too loose: inverted
+        relationships collide). Dropping stop words and suffixes while
+        preserving content-word order means two queries collide only when
+        they share the same content words in the same order — function words
+        and morphology are the only differences this form forgives.
+
+        Residual merges this form accepts, deliberately: tense carried by an
+        auxiliary stop word ("did X call Y" / "does X call Y") collapses,
+        which is why the paraphrase cache path is barred from
+        freshness-required requests — where tense is load-bearing, this key
+        is never consulted. Negation survives ("not" is not a stop word), and
+        inversion survives by order.
+        """
+        return " ".join(_stem(t) for t in self.keywords(query))
+
     def content_key(
         self,
         normalized_query: str,
@@ -162,6 +200,40 @@ class QueryNormalizer:
                 f"q={normalized_query}",
                 f"ds={dataset}",
                 f"fresh={int(freshness_required)}",
+                f"ns={','.join(sorted(node_sets or []))}",
+                f"model={model or ''}",
+                f"user={user_id or ''}",
+            ]
+        )
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    def paraphrase_content_key(
+        self,
+        query: str,
+        dataset: str,
+        *,
+        node_sets: list[str] | None = None,
+        model: str | None = None,
+        user_id: str | None = None,
+        policy_version: str = POLICY_VERSION,
+    ) -> str:
+        """Second-chance cache key over the paraphrase-collapsed form.
+
+        Same scope discipline as ``content_key`` — dataset, NodeSet scope,
+        model, caller, and policy version all key the entry, so a paraphrase
+        hit can never cross a tenant, scope, or model boundary. There is no
+        freshness field because freshness-sensitive answers are barred from
+        the paraphrase namespace entirely (enforced at the write site): a
+        key that forgives auxiliary words forgives tense, and tense is
+        load-bearing exactly when freshness is. The ``pp=1`` prefix keeps
+        this namespace disjoint from exact keys by construction.
+        """
+        payload = "|".join(
+            [
+                "pp=1",
+                f"v={policy_version}",
+                f"q={self.paraphrase_form(query)}",
+                f"ds={dataset}",
                 f"ns={','.join(sorted(node_sets or []))}",
                 f"model={model or ''}",
                 f"user={user_id or ''}",
