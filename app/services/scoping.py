@@ -66,9 +66,7 @@ class NodeSetIndex:
                 if candidate not in ordered:
                     ordered.append(candidate)
             for alias in ordered:
-                tokens = frozenset(
-                    _stem(t) for t in self.normalizer.normalize(alias).split() if t
-                )
+                tokens = frozenset(_stem(t) for t in self.normalizer.normalize(alias).split() if t)
                 if tokens:
                     self._aliases.append((nodeset, alias, tokens))
 

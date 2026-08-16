@@ -56,9 +56,7 @@ class EmptyThenRichClient(CogneeClient):
     ) -> RetrievalResult:
         self.searches.append((query, mode))
         if mode is not SearchMode.GRAPH_COMPLETION:
-            return RetrievalResult(
-                mode=mode, evidence=RetrievalEvidence(), retrieval_stats={}
-            )
+            return RetrievalResult(mode=mode, evidence=RetrievalEvidence(), retrieval_stats={})
         return RetrievalResult(
             mode=mode,
             evidence=RetrievalEvidence(
@@ -101,9 +99,7 @@ async def test_decomposition_fires_only_on_escalation_into_graph_completion() ->
     orch = _orchestrator(client, decomposer)
     # A factual-looking query (no multi-hop signal words, so it routes CHUNKS)
     # that finds nothing gets widened, then escalated into GRAPH_COMPLETION.
-    result = await orch.answer(
-        QueryRequest(query="how does a checkout purchase reach the ledger")
-    )
+    result = await orch.answer(QueryRequest(query="how does a checkout purchase reach the ledger"))
     assert decomposer.calls, "escalation into GRAPH_COMPLETION should decompose"
     assert result.telemetry["decomposed"] is True
     assert result.telemetry["subquery_count"] == 2

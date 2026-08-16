@@ -42,12 +42,12 @@ def test_multiple_entities_derive_multiple_nodesets() -> None:
 
 
 def test_multi_word_alias_requires_all_its_tokens() -> None:
-    """"data warehouse" must not fire on a query that only says "data"."""
+    """ "data warehouse" must not fire on a query that only says "data"."""
     assert NodeSetIndex(INDEX).derive("What's going on with data?") == []
 
 
 def test_matching_is_stemmed_not_substring() -> None:
-    """"invoices" matches "invoice"; "auth" must not fire inside "author"."""
+    """ "invoices" matches "invoice"; "auth" must not fire inside "author"."""
     index = NodeSetIndex(INDEX)
     assert dict(index.derive("where is the invoice stored")).get("billing") == "invoices"
     assert index.derive("who is the author of this doc") == []

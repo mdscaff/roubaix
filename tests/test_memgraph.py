@@ -234,6 +234,79 @@ async def test_degraded_evidence_is_never_promoted() -> None:
     assert graph.edge_count == 0
 
 
+# --- warm-load from Cognee's graph store -------------------------------------
+
+
+class FakeGraphEngine:
+    """Cognee-shaped ``get_graph_data()``: ([(id, props)], [(src, tgt, rel, props)])."""
+
+    def __init__(
+        self,
+        nodes: list[tuple[str, dict[str, object]]],
+        edges: list[tuple[str, str, str, dict[str, object]]],
+    ) -> None:
+        self._nodes = nodes
+        self._edges = edges
+
+    async def get_graph_data(
+        self,
+    ) -> tuple[list[tuple[str, dict[str, object]]], list[tuple[str, str, str, dict[str, object]]]]:
+        return self._nodes, self._edges
+
+
+class ExplodingEngine:
+    async def get_graph_data(
+        self,
+    ) -> tuple[list[tuple[str, dict[str, object]]], list[tuple[str, str, str, dict[str, object]]]]:
+        raise RuntimeError("store unreachable")
+
+
+@pytest.mark.asyncio
+async def test_warm_load_maps_node_names_and_adds_edges() -> None:
+    from app.services.memgraph import warm_load_from_cognee
+
+    graph = InMemoryGraph()
+    engine = FakeGraphEngine(
+        nodes=[("n1", {"name": "billing"}), ("n2", {"name": "warehouse"}), ("n3", {})],
+        edges=[
+            ("n1", "n2", "depends_on", {}),
+            ("n1", "n3", "reports_to", {}),  # n3 has no name → falls back to id
+        ],
+    )
+    loaded = await warm_load_from_cognee(graph, engine=engine)
+    assert loaded == 2
+    # Names resolved via props["name"], and warm-loaded edges answer queries.
+    assert graph.resolve("billing") == "billing"
+    edges = graph.edges_between("billing", "warehouse")
+    assert len(edges) == 1
+    assert edges[0].provenance == "cognee:warm_load"
+    assert graph.edges_between("billing", "n3")  # id fallback is a real node
+
+
+@pytest.mark.asyncio
+async def test_warm_load_dedups_against_existing_edges() -> None:
+    from app.services.memgraph import warm_load_from_cognee
+
+    graph = InMemoryGraph()
+    graph.add_edge("billing", "depends_on", "warehouse", provenance="seed")
+    engine = FakeGraphEngine(
+        nodes=[("a", {"name": "Billing"}), ("b", {"name": "warehouses"})],
+        edges=[("a", "b", "depends_on", {})],  # same edge, canonically
+    )
+    assert await warm_load_from_cognee(graph, engine=engine) == 0
+    assert graph.edge_count == 1
+
+
+@pytest.mark.asyncio
+async def test_warm_load_failure_is_an_enhancement_not_a_validation() -> None:
+    """A broken/absent store must never block startup: log, return 0, move on."""
+    from app.services.memgraph import warm_load_from_cognee
+
+    graph = InMemoryGraph()
+    assert await warm_load_from_cognee(graph, engine=ExplodingEngine()) == 0
+    assert graph.edge_count == 0
+
+
 @pytest.mark.asyncio
 async def test_tier0_disabled_leaves_the_pipeline_unchanged() -> None:
     normalizer = QueryNormalizer()

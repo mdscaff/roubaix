@@ -90,9 +90,7 @@ class EvidencePacker:
         # rank is automatically the tie-break within equal scores.
         scores: dict[str, float] = {}
         if query_keywords and settings.evidentiality_ordering:
-            scores = {
-                digest: _evidentiality(text, query_keywords) for text, digest in deduped
-            }
+            scores = {digest: _evidentiality(text, query_keywords) for text, digest in deduped}
             deduped.sort(key=lambda pair: -scores.get(pair[1], 0.0))
 
         # Fill against both budgets, whichever binds first.

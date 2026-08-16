@@ -471,6 +471,7 @@ class QueryOrchestrator:
         """Return an explicit non-answer. Never cached."""
         total_ms = int((perf_counter() - answer_start) * 1000)
         telemetry: dict[str, Any] = {
+            "tier": "pipeline",
             "evidence_items": len(packed.evidence_items) if packed else 0,
             "retrieval_ms": retrieval_ms,
             "synthesis_ms": 0,

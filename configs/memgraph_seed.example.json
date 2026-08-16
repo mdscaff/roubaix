@@ -1,0 +1,14 @@
+[
+  ["checkout", "calls", "billing"],
+  ["checkout", "calls", "inventory"],
+  ["billing", "depends_on", "warehouse"],
+  ["billing", "reports_to", "finance"],
+  ["warehouse", "writes_to", "ledger"],
+  ["inventory", "reads_from", "warehouse"],
+  ["fulfillment", "reads_from", "ledger"],
+  ["fulfillment", "calls", "shipping"],
+  ["shipping", "writes_to", "tracking"],
+  ["notifications", "reads_from", "tracking"],
+  ["fraud-screening", "calls", "billing"],
+  ["finance", "reads_from", "ledger"]
+]

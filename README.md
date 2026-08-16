@@ -81,6 +81,7 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | Component | Status |
 |---|---|
 | **Tier 0: resident in-memory graph** (edge/path/neighbor queries, promotion from slow path, LRU-bounded) | Working; p50 0.19ms measured |
+| Tier-0 warm-load from Cognee's graph store at startup (+ optional seed file) | Working; skips honestly when no store exists; `/healthz` reports resident size |
 | Scored router + cost-rank tie-break + negation handling | Working, gated in CI |
 | Content-addressed cache (LRU + TTL) | Working; key covers query, dataset, freshness, scope, model, policy version |
 | Cognee retrieval | Live SDK when configured; flagged-degraded stub otherwise |
@@ -102,7 +103,7 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | AdalFlow | **Rejected** — see [ADR-003](docs/adr/ADR-003-reject-adalflow-keep-explicit-controller.md) |
 | Strands Agents SDK | **Patterns adopted, dependency refused** — see [ADR-004](docs/adr/ADR-004-evaluate-strands-adopt-patterns-not-dependency.md) |
 
-**198 tests passing** with the optional `opt` extra installed; 121 passing and the DSPy suite skipped without it, which is how CI runs. All dependencies current as of August 2026.
+**202 tests passing** with the optional `opt` extra installed; 183 passing (1 skipped) without it, which is how CI runs. All dependencies current as of August 2026.
 
 ## Quickstart
 
@@ -115,6 +116,12 @@ uv run uvicorn app.api.main:app --reload
 ```
 
 Open the browser demo at [http://localhost:8000/demo](http://localhost:8000/demo).
+
+For a measured, self-asserting end-to-end demo (real server, real HTTP, production fail-closed posture — every number in the transcript comes from the run itself):
+
+```bash
+uv run python scripts/demo_e2e.py --out demo_transcript.md
+```
 
 Without a live Cognee instance, retrieval returns stub evidence flagged `degraded`, and the controller **fails closed** rather than answering from it. Set `ROUBAIX_ALLOW_STUB_EVIDENCE=true` to exercise the full pipeline anyway — that is what CI does.
 

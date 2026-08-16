@@ -33,6 +33,7 @@ from __future__ import annotations
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from typing import Any, Protocol
 
 from app.services.normalizer import QueryNormalizer
 from app.services.sufficiency import _stem
@@ -265,3 +266,63 @@ def build_graph() -> InMemoryGraph | None:
                 extra={"path": settings.memgraph_seed_path, "error": str(exc)},
             )
     return graph
+
+
+class GraphDataEngine(Protocol):
+    """The slice of Cognee's graph adapters the warm-load depends on."""
+
+    async def get_graph_data(
+        self,
+    ) -> tuple[list[tuple[Any, dict[str, Any]]], list[tuple[Any, Any, Any, dict[str, Any]]]]: ...
+
+
+async def warm_load_from_cognee(graph: InMemoryGraph, engine: GraphDataEngine | None = None) -> int:
+    """Load the Cognee graph store into the resident graph at startup.
+
+    Uses the adapter-agnostic ``get_graph_data()`` interface, so it works over
+    turso/pgGraph/neo4j alike. Node labels come from each node's ``name``
+    property (falling back to ``id``); edges map (source, relationship,
+    target). Everything flows through ``add_edge``, so canonicalization,
+    dedup, junk rejection, and the LRU bound apply to warm-loaded edges
+    exactly as to promoted ones.
+
+    An enhancement, never a validation: any failure — cognee not installed,
+    not configured, an empty store — logs and returns 0, and the graph still
+    learns from promotion at runtime. *engine* is injectable for tests.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    try:
+        if engine is None:
+            from cognee.infrastructure.databases.graph.get_graph_engine import (  # type: ignore[import-not-found]
+                get_graph_engine,
+            )
+
+            engine = await get_graph_engine()
+        nodes, edges = await engine.get_graph_data()
+    except Exception as exc:  # noqa: BLE001 - enhancement, never a validation
+        logger.info(
+            "memgraph_warm_load_skipped",
+            extra={"reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return 0
+
+    names: dict[str, str] = {}
+    for node_id, props in nodes:
+        node_props = props or {}
+        names[str(node_id)] = str(node_props.get("name") or node_id)
+
+    loaded = 0
+    for source_id, target_id, relationship, _props in edges:
+        loaded += graph.add_edge(
+            names.get(str(source_id), str(source_id)),
+            str(relationship),
+            names.get(str(target_id), str(target_id)),
+            provenance="cognee:warm_load",
+        )
+    logger.info(
+        "memgraph_warm_loaded",
+        extra={"edges": loaded, "store_nodes": len(nodes), "store_edges": len(edges)},
+    )
+    return loaded

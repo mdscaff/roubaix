@@ -2,6 +2,43 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.8.0] — 2026-08-16
+
+Tier 0 no longer starts cold, and the tier model is demonstrable end to end
+against a real server.
+
+### Added
+
+- **Warm-load from Cognee at startup** (`warm_load_from_cognee` in
+  `app/services/memgraph.py`, called from the FastAPI lifespan). Reads the
+  whole store through the adapter-agnostic `get_graph_data()` interface
+  (turso/pgGraph/neo4j alike), maps node ids to their `name` property, and
+  feeds every edge through `add_edge` — so canonicalization, dedup, junk
+  rejection, and the LRU bound apply to warm-loaded edges exactly as to
+  promoted ones, with provenance `cognee:warm_load`. An enhancement, never a
+  validation: cognee missing, unconfigured, or empty logs a skip and returns
+  0, and the graph still learns from promotion at runtime. Covered by unit
+  tests with an injected fake engine.
+- **`/healthz` reports the resident graph** (`enabled`, `nodes`, `edges`):
+  Tier 0's residency is operational state, so it is observable.
+- **`scripts/demo_e2e.py`** — an end-to-end demo that boots the real app
+  under uvicorn (subprocess, not TestClient) in the production fail-closed
+  posture and drives POST /answer through every tier boundary: warm-load +
+  seed at startup, Tier-0 edge/path/no-path/neighbor answers with measured
+  per-request latency, a p50/p95/p99 sweep, an honest fail-closed
+  fall-through (no live retrieval → explicit non-answer with a reason), and
+  the promotion learning loop (retrieval simulated, and labeled as such —
+  everything else is the real pipeline). Each section asserts the behavior
+  it claims; the script exits non-zero if any claim regressed, so the demo
+  is also a smoke test.
+- `configs/memgraph_seed.example.json`: a 12-edge commerce topology for
+  seeding demos and local runs via `ROUBAIX_MEMGRAPH_SEED_PATH`.
+
+### Changed
+
+- Fail-closed telemetry now carries `tier: "pipeline"` like every other
+  exit, so tier accounting has no untagged path.
+
 ## [0.7.0] — 2026-08-16
 
 The problem statement, restated and rebuilt around: **fast and cheapest is

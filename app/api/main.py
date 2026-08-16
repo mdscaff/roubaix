@@ -47,6 +47,13 @@ orchestrator = QueryOrchestrator(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Warm-load the resident graph from Cognee's store, so Tier 0 serves
+    # structural queries from the first request rather than only after
+    # promotion has taught it. Skips silently when Cognee has no data.
+    if orchestrator.graph is not None:
+        from app.services.memgraph import warm_load_from_cognee
+
+        await warm_load_from_cognee(orchestrator.graph)
     yield
     # Release the pooled synthesis connection and flush buffered traces at
     # shutdown. Flushing per span would block the event loop on every query.
@@ -54,12 +61,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     langfuse_tracing.flush()
 
 
-app = FastAPI(title="Roubaix API", version="0.7.0", lifespan=lifespan)
+app = FastAPI(title="Roubaix API", version="0.8.0", lifespan=lifespan)
 
 
 @app.get("/healthz")
 async def healthz() -> dict[str, object]:
-    return {"status": "ok", "cognee": get_cognee_status()}
+    graph = orchestrator.graph
+    return {
+        "status": "ok",
+        "cognee": get_cognee_status(),
+        "memgraph": {
+            "enabled": graph is not None,
+            "nodes": graph.node_count if graph else 0,
+            "edges": graph.edge_count if graph else 0,
+        },
+    }
 
 
 @app.get("/demo")

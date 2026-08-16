@@ -102,7 +102,7 @@ def test_coverage_is_set_level_not_per_item() -> None:
 
 
 def test_morphological_variants_count_as_coverage() -> None:
-    """"expose" must match "exposes" — token-exact matching without stemming
+    """ "expose" must match "exposes" — token-exact matching without stemming
     systematically under-covers natural phrasing."""
     result = SufficiencyGate().check(
         QueryRequest(query="what port does billing expose"),

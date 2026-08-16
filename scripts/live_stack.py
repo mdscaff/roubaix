@@ -100,8 +100,8 @@ def preflight(allow_mock_embeddings: bool) -> list[dict]:
         )
     )
 
-    llm_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv(
-        "OPENROUTER_API_KEY"
+    llm_key = (
+        os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY")
     )
     checks.append(
         _check(
@@ -120,7 +120,9 @@ def preflight(allow_mock_embeddings: bool) -> list[dict]:
     # A key is necessary but not sufficient: the provider must also be
     # reachable, and in sandboxed environments the egress allowlist — not the
     # key — is usually the binding constraint.
-    endpoint = "https://openrouter.ai" if os.getenv("OPENROUTER_API_KEY") else "https://api.openai.com"
+    endpoint = (
+        "https://openrouter.ai" if os.getenv("OPENROUTER_API_KEY") else "https://api.openai.com"
+    )
     llm_reachable = _reachable(endpoint)
     checks.append(
         _check(
@@ -262,6 +264,13 @@ async def seed_and_smoke(dataset: str, mock_embeddings: bool) -> dict:
                 ),
             }
         )
+
+    # Warm-load the resident graph from the freshly cognified store and
+    # record how much of it became Tier-0-resident.
+    from app.services.memgraph import InMemoryGraph, warm_load_from_cognee
+
+    graph = InMemoryGraph()
+    report["memgraph_warm_loaded_edges"] = await warm_load_from_cognee(graph)
 
     report["all_modes_live"] = all(s["live"] for s in report["smoke"])
     report["quality_meaningful"] = report["all_modes_live"] and not mock_embeddings

@@ -22,6 +22,14 @@ def test_healthz_reports_cognee_status(client: TestClient) -> None:
     assert "cognee" in body
 
 
+def test_healthz_reports_memgraph_stats(client: TestClient) -> None:
+    """Tier 0's residency is operational state; it must be observable."""
+    memgraph = client.get("/healthz").json()["memgraph"]
+    for field in ("enabled", "nodes", "edges"):
+        assert field in memgraph
+    assert isinstance(memgraph["nodes"], int)
+
+
 def test_answer_returns_the_documented_contract(client: TestClient) -> None:
     response = client.post("/answer", json={"query": "What port does billing expose?"})
     assert response.status_code == 200
