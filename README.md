@@ -129,10 +129,16 @@ uv run python scripts/live_stack.py --preflight-only   # names anything missing
 uv run python scripts/live_stack.py                    # seed + smoke, stamped report
 ```
 
-The preflight boundary is measured, not assumed: `add` runs fully offline with
-the embedded profile the script configures; `cognify` and `search` require one
-thing — a working LLM key. Reports produced with mock embeddings are stamped
-`quality_meaningful: false` and must not be quoted.
+The preflight boundary is measured, not assumed, and it probes **egress as
+well as keys**: in a sandboxed environment the network allowlist is usually
+the binding constraint (a working key cannot reach a blocked provider). Three
+routes to live, in order of readiness, are laid out in
+[docs/implementation-plan.md](docs/implementation-plan.md) ("Going live"):
+this environment plus one egress-allowlist entry, a Docker machine via the
+checked-in compose file, or Cognee Cloud — the last is not yet a working path
+(no cloud transport exists in the SDK or this repo), and the preflight says so
+rather than letting a set key masquerade as one. Reports produced with mock
+embeddings are stamped `quality_meaningful: false` and must not be quoted.
 
 ### Run evals
 

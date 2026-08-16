@@ -287,14 +287,43 @@ begins, and the script's preflight encodes it:
 | `search` | **No** | requires cognified data |
 | embeddings | mockable | `MOCK_EMBEDDING=true` runs the plumbing with fake vectors; every report from that mode is stamped `quality_meaningful: false` |
 
-So the single remaining prerequisite for live retrieval is an LLM key
-(`OPENROUTER_API_KEY` or `OPENAI_API_KEY`, plus `OPENAI_API_KEY` for real
-embeddings). With one present: `uv run --extra opt python scripts/live_stack.py`
-seeds the corpus and smoke-tests every mode through Roubaix's own client, so
-the degraded flag is honoured end-to-end. Then the deferred gates unlock, in
-order: Phase D's recall-vs-cost gate, the full-pipeline eval
-(`run_eval.py`, whose validity warnings will finally be empty), the scoping
-precision gate, and C2's label mining.
+### Going live: three routes, probed 2026-08-16
+
+A second probing round (Docker daemon, container registries, ollama, GitHub
+release assets, cognee.ai) sharpened the boundary: **the binding constraint in
+a sandboxed environment is the egress allowlist, not keys and not Docker.**
+Measured here: the Docker daemon starts fine, but every registry's blob CDN
+(Docker Hub, ECR Public, ollama's registry) is blocked, as are huggingface.co,
+api.openai.com, openrouter.ai, and cognee.ai; pypi and github.com release
+downloads are open, but no reachable source ships usable LLM weights. The
+preflight in `scripts/live_stack.py` now probes egress as well as keys, so it
+reports *which* constraint binds.
+
+1. **This environment (or any sandbox), one allowlist change.** Add
+   `openrouter.ai` (or `api.openai.com`) to the environment's egress
+   allowlist — for Claude Code web environments the owner sets this in the
+   environment's network settings — set the key in a gitignored `.env`, and
+   `uv run --extra opt python scripts/live_stack.py` stands the stack up with
+   the embedded profile. Adding `api.openai.com` also gives real embeddings.
+   Everything below the line then unlocks in order: Phase D's recall-vs-cost
+   gate, the full-pipeline eval, the scoping precision gate, C2's label
+   mining.
+2. **A developer machine with Docker.** `docker compose -f
+   docker/docker-compose.yml up` (Postgres + pgGraph) plus the same keys; or
+   a local Ollama for a keyless-but-real LLM. Same one-command standup.
+3. **Cognee Cloud (cognee.ai) with an API key.** Honestly the least ready:
+   the installed SDK ships **no cloud transport**, `CogneeClient` implements
+   none, and cognee.ai is egress-blocked from this environment, so its API
+   shape cannot even be read from here. The `COGNEE_API_KEY` /
+   `COGNEE_BASE_URL` settings exist but are documented as unused. Building
+   the REST client is a real task that needs reachable API docs — recorded
+   here so a set key is never mistaken for a working path, and the preflight
+   says exactly that if it finds one.
+
+An API key is a secret: it belongs in the gitignored `.env` or the
+environment's secret store, never in a committed file or a chat transcript if
+avoidable — and a key that has been shared around before is a good candidate
+for rotation before use.
 
 ## Sequencing and dependencies
 

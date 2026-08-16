@@ -44,6 +44,7 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib import request as urlrequest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -56,6 +57,24 @@ REPORT_DIR = REPO_ROOT / "evals" / "live"
 
 def _check(name: str, ok: bool, detail: str, fix: str | None = None) -> dict:
     return {"check": name, "ok": ok, "detail": detail, **({"fix": fix} if fix else {})}
+
+
+def _reachable(url: str, timeout: float = 8.0) -> bool:
+    """True when *url* answers with any HTTP status at all.
+
+    An HTTP error (401, 404) still means the network path is open — the
+    failure mode being probed here is egress blocking, where the connection
+    never completes. Empirically (2026-08-16): behind a restricted egress
+    policy, api.openai.com, openrouter.ai, api.cognee.ai, huggingface.co,
+    registry.ollama.ai, and every container-registry CDN were all blocked,
+    while pypi.org and github.com release downloads were open.
+    """
+    try:
+        req = urlrequest.Request(url, method="HEAD")
+        urlrequest.urlopen(req, timeout=timeout)
+        return True
+    except Exception as exc:  # noqa: BLE001 - any HTTP status means reachable
+        return hasattr(exc, "code")
 
 
 def preflight(allow_mock_embeddings: bool) -> list[dict]:
@@ -90,12 +109,57 @@ def preflight(allow_mock_embeddings: bool) -> list[dict]:
             bool(llm_key),
             "LLM key present" if llm_key else "no LLM key in env",
             fix=(
-                "set OPENROUTER_API_KEY or OPENAI_API_KEY. cognify's entity "
-                "extraction has no mock: without a working LLM it spins in "
-                "litellm retries until timeout — measured, not assumed."
+                "set OPENROUTER_API_KEY or OPENAI_API_KEY (a gitignored .env is "
+                "the right place). cognify's entity extraction has no mock: "
+                "without a working LLM it spins in litellm retries until "
+                "timeout — measured, not assumed."
             ),
         )
     )
+
+    # A key is necessary but not sufficient: the provider must also be
+    # reachable, and in sandboxed environments the egress allowlist — not the
+    # key — is usually the binding constraint.
+    endpoint = "https://openrouter.ai" if os.getenv("OPENROUTER_API_KEY") else "https://api.openai.com"
+    llm_reachable = _reachable(endpoint)
+    checks.append(
+        _check(
+            "llm_egress",
+            llm_reachable,
+            f"{endpoint} reachable" if llm_reachable else f"{endpoint} is egress-blocked",
+            fix=(
+                "this is a network-policy problem, not a key problem: add the "
+                "provider's domain to the environment's egress allowlist "
+                "(for Claude Code web environments, the owner configures this "
+                "in the environment's network settings)"
+            ),
+        )
+    )
+
+    # Cognee Cloud: the settings exist (COGNEE_API_KEY / COGNEE_BASE_URL), but
+    # the installed SDK ships NO cloud transport and CogneeClient implements
+    # none — a cloud key alone cannot make this repository talk to cognee.ai.
+    # Stated here so a set key is never mistaken for a working path.
+    if os.getenv("COGNEE_API_KEY"):
+        cloud_base = os.getenv("COGNEE_BASE_URL", "https://api.cognee.ai")
+        cloud_reachable = _reachable(cloud_base)
+        checks.append(
+            _check(
+                "cognee_cloud",
+                False,
+                (
+                    f"COGNEE_API_KEY is set and {cloud_base} is "
+                    f"{'reachable' if cloud_reachable else 'egress-blocked'}, but "
+                    "no cloud transport exists in this repository or in the "
+                    "installed cognee SDK — the key cannot be used yet"
+                ),
+                fix=(
+                    "a Cognee Cloud REST client is unimplemented (see "
+                    "docs/implementation-plan.md, Going live); the local SDK "
+                    "path with an LLM key is the supported route today"
+                ),
+            )
+        )
 
     have_embed_key = bool(os.getenv("OPENAI_API_KEY") or os.getenv("EMBEDDING_API_KEY"))
     mock_on = os.getenv("MOCK_EMBEDDING", "").lower() in ("true", "1", "yes")

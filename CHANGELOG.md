@@ -2,6 +2,25 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.6.1] — 2026-08-16
+
+### Changed
+
+- **Preflight now probes egress, not just keys.** A second measurement round
+  established that in a sandboxed environment the network allowlist is the
+  binding constraint: the Docker daemon starts, but every container registry's
+  blob CDN is blocked (Docker Hub, ECR Public, ollama), as are
+  huggingface.co, the LLM providers, and cognee.ai — while pypi and GitHub
+  release downloads are open (and carry no usable LLM weights).
+  `scripts/live_stack.py` reports which constraint binds and names the fix,
+  including "add the provider to the environment's egress allowlist" when the
+  key is present but the provider is unreachable.
+- **Cognee Cloud is explicitly not-yet-a-path.** The installed SDK ships no
+  cloud transport and `CogneeClient` implements none; if `COGNEE_API_KEY` is
+  set, the preflight says the key cannot be used yet instead of letting it
+  masquerade as a working configuration. The plan's "Going live" section
+  records the three routes and what each needs.
+
 ## [0.6.0] — 2026-08-16
 
 Phase D delivered; live-Cognee standup reduced to a single missing key.
