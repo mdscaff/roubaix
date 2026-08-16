@@ -42,6 +42,9 @@ opt = [
   # present transitively via cognee, so token estimates silently changed
   # accuracy depending on which extras were installed.
   "tiktoken>=0.13.0",
+  # cognee.add imports s3fs even for local files (measured: ModuleNotFoundError
+  # without it), and cognee does not declare it in its base dependencies.
+  "s3fs>=2024.10.0",
 ]
 demo = [
   "playwright>=1.62.0",

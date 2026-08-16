@@ -12,6 +12,7 @@ Layer 3 similarity matching (near-duplicate queries) is deferred; see
 
 from __future__ import annotations
 
+import asyncio
 from time import perf_counter
 from typing import Any, cast
 
@@ -28,6 +29,7 @@ from app.observability.eval_trace import get_eval_run_context
 from app.observability.gen_ai import gen_ai_attributes
 from app.observability.metrics import metrics
 from app.services.cache import ContentAddressedCache
+from app.services.decomposition import SubQueryDecomposer, build_decomposer, merge_results
 from app.services.evidence import EvidencePacker
 from app.services.normalizer import QueryNormalizer
 from app.services.router import QueryRouter
@@ -49,6 +51,7 @@ class QueryOrchestrator:
         synthesizer: AnswerSynthesizer | None = None,
         normalizer: QueryNormalizer | None = None,
         cache: ContentAddressedCache | None = None,
+        decomposer: SubQueryDecomposer | None = None,
     ) -> None:
         self.router = router
         self.cognee_client = cognee_client
@@ -57,6 +60,7 @@ class QueryOrchestrator:
         self.synthesizer = synthesizer or AnswerSynthesizer()
         self.normalizer = normalizer or QueryNormalizer()
         self.cache = cache or ContentAddressedCache()
+        self.decomposer = decomposer if decomposer is not None else build_decomposer()
 
     async def answer(self, request: QueryRequest) -> AnswerResult:
         answer_start = perf_counter()
@@ -119,6 +123,8 @@ class QueryOrchestrator:
         attempted: set[SearchMode] = set()
         escalations: list[str] = []
         widened = False
+        decomposed = False
+        subquery_count = 0
         packed: PackedEvidence | None = None
 
         for _ in range(MAX_ATTEMPTS):
@@ -126,13 +132,47 @@ class QueryOrchestrator:
             metrics.increment(f"route:{route.mode.value}")
 
             retrieval_start = perf_counter()
-            result = await self.cognee_client.search(
-                query=request.query,
-                mode=route.mode,
-                dataset=dataset,
-                node_sets=route.node_sets,
-                evidence_budget=route.evidence_budget,
-            )
+            # Phase D: a query that defeated a cheaper mode and is now
+            # escalating into GRAPH_COMPLETION gets one shot at schema-
+            # constrained decomposition — parallel sub-queries over the same
+            # scope, merged before packing. Escalation-only by design: a query
+            # the router sent to GRAPH_COMPLETION directly routed cleanly and
+            # does not pay for a decomposition call.
+            subqueries: list[str] = []
+            if (
+                self.decomposer is not None
+                and not decomposed
+                and retry_count > 0
+                and route.mode is SearchMode.GRAPH_COMPLETION
+            ):
+                schema = self._schema_for_decomposition()
+                subqueries = self.decomposer.decompose(request.query, schema)
+
+            if len(subqueries) >= 2:
+                decomposed = True
+                subquery_count = len(subqueries)
+                metrics.increment("runtime:decomposed")
+                sub_results = await asyncio.gather(
+                    *(
+                        self.cognee_client.search(
+                            query=subquery,
+                            mode=SearchMode.GRAPH_COMPLETION,
+                            dataset=dataset,
+                            node_sets=route.node_sets,
+                            evidence_budget=route.evidence_budget,
+                        )
+                        for subquery in subqueries
+                    )
+                )
+                result = merge_results(request.query, list(sub_results))
+            else:
+                result = await self.cognee_client.search(
+                    query=request.query,
+                    mode=route.mode,
+                    dataset=dataset,
+                    node_sets=route.node_sets,
+                    evidence_budget=route.evidence_budget,
+                )
             retrieval_ms += int((perf_counter() - retrieval_start) * 1000)
 
             packed = self.evidence_packer.pack(
@@ -171,6 +211,8 @@ class QueryOrchestrator:
                     reason=decision.reason,
                     stop_reason=decision.stop_reason,
                     escalations=escalations,
+                    decomposed=decomposed,
+                    subquery_count=subquery_count,
                     retrieval_ms=retrieval_ms,
                     answer_start=answer_start,
                     packed=packed,
@@ -190,6 +232,8 @@ class QueryOrchestrator:
                 reason="attempt_ceiling_reached",
                 stop_reason=StopReason.ATTEMPT_CEILING,
                 escalations=escalations,
+                decomposed=decomposed,
+                subquery_count=subquery_count,
                 retrieval_ms=retrieval_ms,
                 answer_start=answer_start,
                 packed=packed,
@@ -270,6 +314,8 @@ class QueryOrchestrator:
                 reason=f"synthesis_failed:{synthesis.failure_reason}",
                 stop_reason=StopReason.SYNTHESIS_FAILED,
                 escalations=escalations,
+                decomposed=decomposed,
+                subquery_count=subquery_count,
                 retrieval_ms=retrieval_ms,
                 answer_start=answer_start,
                 packed=packed,
@@ -301,6 +347,8 @@ class QueryOrchestrator:
                 "route_signals": route.signals,
                 "route_confident": route.confident,
                 "widened": widened,
+                "decomposed": decomposed,
+                "subquery_count": subquery_count,
                 "temporal_grounded": packed.temporal_grounded,
                 "unsynthesized": synthesis.unsynthesized,
                 "degraded": packed.degraded,
@@ -323,6 +371,18 @@ class QueryOrchestrator:
             )
         return answer_result
 
+    def _schema_for_decomposition(self) -> list[str]:
+        """The graph's declared NodeSet names, from the router's index.
+
+        The schema constraint is what keeps decomposition from inventing
+        sub-questions the graph could never answer; with no index configured
+        the decomposer falls back to its unconstrained-but-bounded prompt.
+        """
+        index = getattr(self.router, "node_set_index", None)
+        if index is None:
+            return []
+        return sorted({nodeset for nodeset, _, _ in index._aliases})
+
     def _fail_closed(
         self,
         *,
@@ -331,6 +391,8 @@ class QueryOrchestrator:
         reason: str,
         escalations: list[str],
         stop_reason: StopReason | None = None,
+        decomposed: bool = False,
+        subquery_count: int = 0,
         retrieval_ms: int,
         answer_start: float,
         packed: PackedEvidence | None,
@@ -345,6 +407,8 @@ class QueryOrchestrator:
             "escalation_reason": reason,
             "stop_reason": stop_reason.value if stop_reason else None,
             "escalation_chain": escalations,
+            "decomposed": decomposed,
+            "subquery_count": subquery_count,
             "route_signals": route.signals,
             "degraded": packed.degraded if packed else False,
             "degraded_reason": packed.degraded_reason if packed else None,
