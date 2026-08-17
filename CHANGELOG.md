@@ -2,6 +2,80 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.10.0] — 2026-08-17
+
+First session with LLM egress and a key. The headline is not a feature: both
+DSPy inference paths were **dead in the serving process**, and both failed
+silently, because their fallbacks are deliberate. `dspy.configure` was called
+only by the GEPA compile script, so every other DSPy program raised "No LM is
+loaded" on first use and degraded exactly as designed. Measured, not assumed.
+
+### Fixed
+
+- **`dspy_program.inference_lm`** — one LM binding for every DSPy inference
+  path, set per program rather than via a global `dspy.configure`, so a
+  compile's own configure stays authoritative. Before it, the GEPA-compiled
+  router fell back on **18/18** queries it was consulted on and reported
+  exactly the deterministic baseline's 85%: a compile-then-judge that never
+  judged the compiled program.
+- **Decomposition (Phase D) reached no LM either** — **0/46** queries
+  decomposed, latching `_failed` and degrading to single-query retrieval. With
+  the binding, 15/46 fire.
+- **`QueryOrchestrator(decomposer=None)` meant "use the default"**, so there
+  was no way to construct an orchestrator with decomposition off and callers
+  asking for off silently got it on. A `_DEFAULT` sentinel now separates
+  "omitted" from "explicitly none". This is why
+  `test_no_decomposer_means_the_pipeline_is_unchanged` passed: the feature was
+  broken, not disabled.
+- **`live_stack.py`** — `cognify` alone does not populate the `triplet_text`
+  collection on cognee 1.4.2, so TRIPLET_COMPLETION returned `NoDataError` and
+  `all_modes_live` could never be true; the standup now runs the
+  `create_triplet_embeddings` memify pipeline after cognify. Its plumbing-only
+  message also blamed mock embeddings unconditionally, sending the reader after
+  a key that was already set; it now names which modes did not go live.
+
+### Measured
+
+- **GEPA compile-then-judge, RUN: 96% (25/26) held-out** vs the deterministic
+  baseline's 85% (22/26). Compiled on the tuning corpus only; learned stage
+  consulted on all 26, 0 fallbacks; stable across 4 repeats. Single miss:
+  `ho-rel-004`. Held narrowly — 3 queries on n=26, and ADR-005 pre-committed to
+  a negative result being the literature-consistent outcome. Not the default
+  router; loads only via `--dspy-artifact`.
+- **Live stack up on the embedded profile with real embeddings.** All three
+  smoke modes live, `quality_meaningful: true`. OpenRouter serves
+  `/v1/embeddings` (verified with real vectors), so no mock vectors were
+  needed — but the `cognee_setup` bridge sets `LLM_ENDPOINT` and not
+  `EMBEDDING_ENDPOINT`, so an OpenRouter-only setup must set
+  `EMBEDDING_ENDPOINT`/`EMBEDDING_API_KEY` explicitly or its key goes to
+  `api.openai.com`.
+- **Phase D gate: half-run, NOT passed.** Cost half clears (1.06× input tokens,
+  gate ≤1.5×). Recall half cannot be run: no gold evidence labels exist, and
+  the observable proxy is saturated (`evidence_items` is exactly 1 for all 15
+  queries in *both* arms). A comparison that risked nothing is not a gate. Also
+  recorded: the gate names the multi-hop bucket, but the ladder is
+  `GRAPH_COMPLETION → GRAPH_SUMMARY_COMPLETION` and multi-hop queries route
+  *directly* into GRAPH_COMPLETION, so decomposition is unreachable on that
+  bucket by construction.
+
+### Still blocked — and not on egress
+
+Phase D's recall half and C2 label mining both need an evidence/answer-labelled
+corpus; `evals/*.jsonl` carry only `expected_mode`. C2 additionally has no
+implementation to run — only the deferral note in `scoping.py`. Its stated
+condition (live telemetry) is now met; the labels are what is missing. The
+previous plan's claim that an egress allowlist entry would unlock these is
+corrected in `docs/implementation-plan.md`.
+
+### Known issue
+
+`tests/test_api.py::test_answer_accepts_the_full_request_contract` and
+`tests/test_synthesizer.py::test_no_api_key_is_labelled_unsynthesized_not_failed`
+fail on any machine with a real key in `.env`. They assert no-API-key
+behaviour, but `AnswerSynthesizer(api_key="")` falls through to settings, which
+reads `.env`; both pass with `.env` moved aside. A test-isolation bug, not a
+regression — unfixed here so it is not confused with this change.
+
 ## [0.9.0] — 2026-08-16
 
 Every remaining phase that can run without live egress, run. What still

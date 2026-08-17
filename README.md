@@ -30,8 +30,9 @@ Routing is the one part of the pipeline that can be measured honestly without a 
 | Accuracy when the router reports confidence | 93% | 58% of traffic. |
 | Accuracy when the router reports **low** confidence | 73% | 42% of traffic, holding 3 of the 4 misses. This is the band the DSPy stage serves. |
 | NodeSet scoping precision (Phase C1 gate) | **92%** (gate: ≥70%) | Hand-labelled 34-row extension of the held-out corpus, measured through the real router wiring. Labels and index share an author — judgment-anchored, not blind, and the corpus pins known failure modes so they can't be papered over. Recall (also 92%) is reported, not gated: misses are Phase C2's territory. |
+| Routing accuracy, held-out, **GEPA-compiled** router (n=26) | **96%** | The compiled program consulted on all 26, falling back 0 times; stable across 4 repeats. Compiled on the tuning corpus only, judged here on the held-out one. Read it narrowly: 85% → 96% is 3 queries on n=26, and ADR-005 pre-committed to a negative result being the literature-consistent outcome. Not the default router — it loads only via `--dspy-artifact`. |
 
-Reproduce with `uv run python scripts/eval_routing.py` and `uv run python scripts/eval_scoping.py`. Neither needs a Cognee instance, an LLM, or the network — routing and scoping are pure functions of the query, which is why they are the two metrics gated in CI.
+Reproduce the first two with `uv run python scripts/eval_routing.py` and `uv run python scripts/eval_scoping.py`. Neither needs a Cognee instance, an LLM, or the network — routing and scoping are pure functions of the query, which is why they are the two metrics gated in CI. The compiled-router row is the exception: it calls an LM, so it needs a key (`uv run --extra opt python scripts/eval_routing.py --dspy-artifact artifacts/router_gepa.json`).
 
 The four held-out misses are listed in [docs/evaluation-plan.md](docs/evaluation-plan.md) and are deliberately **not** fixed. Tuning the rules until the held-out corpus scores 100% would turn the only unbiased measurement in this repo into a restatement of the rules.
 
@@ -39,7 +40,7 @@ The four held-out misses are listed in [docs/evaluation-plan.md](docs/evaluation
 
 Stated plainly, because the gap between these two lists is where this kind of project usually oversells:
 
-- **Cost per answer.** The plumbing is real — provider-reported token usage when available, explicitly labelled estimates otherwise, a per-model price table, cost in every trace. But no run against live Cognee with a live LLM has been recorded here, so there is no cost figure to quote.
+- **Cost per answer.** The plumbing is real — provider-reported token usage when available, explicitly labelled estimates otherwise, a per-model price table, cost in every trace. A live run against real Cognee retrieval and a real LLM now exists (2026-08-17), so the pipeline is no longer untested end-to-end, but the seeded corpus is 1KB and 20 nodes. Any cost-per-answer figure from it would describe that corpus, not a workload, so none is quoted.
 - **Answer quality.** There is no ground-truth answer in the corpus and no LLM judge. `accepted_rate` measures "the controller did not refuse", which is not a quality metric.
 - **Latency.** Eval runs against stub retrieval report ~0ms. Those numbers describe the stub.
 - **Prompt-prefix cache savings.** The prefix is structured for it but is ~120 tokens, under every provider's minimum cacheable prefix. The discount is currently zero. See the note in `app/services/synthesizer.py`.
@@ -94,14 +95,14 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | Set-level sufficiency gate (Tier 0 lexical; Tier 1 MiniCheck via `verify` extra) | Working; acceptance gates encoded as losable tests |
 | Evidentiality-ordered packing + budget-pressure observable | Working; one flag back to rank order |
 | NodeSet derivation by entity anchoring (`ROUBAIX_NODESET_INDEX_PATH`) | Working; caller scope always wins |
-| Sub-question decomposition on GRAPH_COMPLETION escalations | Working; recall-vs-cost gate awaits the live stack |
-| Live stack bootstrap (`scripts/live_stack.py`) | Preflight + embedded profile + seeded smoke test; needs an LLM key to go live |
-| Cost accounting (measured vs estimated) | Working; no live run recorded |
+| Sub-question decomposition on GRAPH_COMPLETION escalations | Working (fires 15/46 once an LM is bound); recall-vs-cost gate half-run, **not passed** — no evidence labels exist |
+| Live stack bootstrap (`scripts/live_stack.py`) | Stood up 2026-08-17: all three smoke modes live on real embeddings, `quality_meaningful: true` |
+| Cost accounting (measured vs estimated) | Working; live run recorded, but the 1KB seeded corpus is too small to quote a per-answer figure |
 | Caller ceilings (`max_cost_cents`, `max_latency_ms`) | Working; cost trims the pack, latency stops the loop |
 | Stop-reason vocabulary + OTel `gen_ai.*` attributes | Working |
 | Eval harness (5 baselines, losable gates, validity warnings) | Working; 4 run by default, `dspy_router` on request |
 | LLM synthesis | OpenRouter; failures fail closed |
-| NodeSet scoping (learned triple scorer, C2) | Deferred until live telemetry can mine training labels |
+| NodeSet scoping (learned triple scorer, C2) | Unimplemented. Live telemetry now exists, so the stated deferral condition is met; the blocker is answer/evidence labels |
 | Temporal / Nexus | Scaffold; behind the main orchestrator (see ADR-002) |
 | DSPy / GEPA learned router | **Wired** — runs only on the unconfident band (42% of traffic, holding 75% of errors); degrades to deterministic on any failure. No compile run recorded yet. See [ADR-005](docs/adr/ADR-005-dspy-learned-stage-over-the-ambiguous-band.md) |
 | AdalFlow | **Rejected** — see [ADR-003](docs/adr/ADR-003-reject-adalflow-keep-explicit-controller.md) |

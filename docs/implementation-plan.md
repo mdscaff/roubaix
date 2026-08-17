@@ -209,15 +209,39 @@ trusted alone.
 
 ---
 
-## Phase D — Schema-constrained sub-question decomposition (escalation-only) — **DELIVERED (live validation pending)**
+## Phase D — Schema-constrained sub-question decomposition (escalation-only) — **DELIVERED; gate HALF-RUN, NOT PASSED**
 
 Shipped in `app/services/decomposition.py` + orchestrator wiring: fires only
 when the controller escalates into GRAPH_COMPLETION, fan-out capped at 4,
 schema drawn from the NodeSet index, degraded sub-results dropped rather than
-blended, all-degraded merges degraded. The acceptance gate below (beat
-single-query GRAPH_COMPLETION on evidence recall at ≤1.5× token cost) **has
-not been run** — it needs the live stack, and no number is claimed until it
-is. Original design notes follow.
+blended, all-degraded merges degraded.
+
+**Status after the first live run (2026-08-17).** Until that run the mechanism
+was delivered but *unreachable*: nothing bound a DSPy LM outside the GEPA
+compile script, so every `decompose()` raised "No LM is loaded", latched
+`_failed`, and degraded to single-query retrieval — silently, because that is
+the designed fallback. Measured: **0/46 queries decomposed**. With the LM bound
+(`dspy_program.inference_lm`), 15/46 fire.
+
+The acceptance gate is **not passed**, and only half of it could be run:
+
+- **Cost half — clears.** 1.06× input tokens on the n=15 population where
+  decomposition fires (gate allows ≤1.5×).
+- **Recall half — cannot be run at all.** There are no gold evidence labels in
+  this repository, and the only observable proxy is saturated: `evidence_items`
+  is exactly 1 for all 15 queries in *both* arms. A comparison that risked
+  nothing is not a gate, so no adoption claim is made.
+
+Two things for whoever writes the labels. First, the gate names the multi-hop
+bucket, but the escalation ladder is `GRAPH_COMPLETION →
+GRAPH_SUMMARY_COMPLETION` and every multi-hop query routes *directly* into
+GRAPH_COMPLETION — it can only escalate out, never in. Decomposition is
+unreachable on that bucket by construction; it fires on relationship-heavy and
+ambiguous queries instead, so the gate's population needs restating. Second,
+the seeded corpus (1KB, 20 nodes) is too small for fan-out to surface anything
+a single query misses; the substrate has to grow with the labels.
+
+Original design notes follow.
 
 Youtu-GraphRAG (ICLR 2026, arXiv:2508.19855; MIT-licensed repo) decomposes
 complex queries into parallel sub-queries **constrained by the graph's declared
@@ -262,13 +286,23 @@ losable comparison, run before any adoption claim.
 Three of the five researched areas produced zero claims that survived
 adversarial verification. These stay open, with what would change their status:
 
-1. **Learned routing / cascades.** No verified evidence that a learned router
-   (GEPA-compiled or Adaptive-RAG-style) beats a strong rule baseline like the
-   85% deterministic router, and no verified GEPA compile results in the wild
-   for classification-shaped tasks. This *raises* the evidentiary bar for
-   ADR-005's compile run: the plan remains compile-then-judge on the held-out
-   corpus, and a negative result is now the literature-consistent outcome, not
-   a surprise. Status changes when our own compile run lands numbers.
+1. **Learned routing / cascades.** ~~No verified evidence that a learned router
+   beats a strong rule baseline.~~ **Status changed 2026-08-17: our own compile
+   run landed numbers.** GEPA-compiled on the tuning corpus, judged on the
+   held-out one: **96% (25/26) vs the deterministic baseline's 85% (22/26)**,
+   learned stage consulted on all 26 with 0 fallbacks, stable across 4 repeats.
+   The single miss is `ho-rel-004` (expected TRIPLET_COMPLETION, routed
+   GRAPH_COMPLETION).
+
+   Read narrowly, for three reasons. 85% → 96% is **3 queries on n=26** — well
+   inside what a differently-drawn corpus could move. The external literature
+   still offers no verified GEPA results for classification-shaped tasks, so
+   this is a local result, not a confirmation of one. And the first judge run
+   reported exactly 85% because the compiled program fell back on 18/18 queries
+   for want of a bound LM — a compile-then-judge that never judged the compiled
+   program, and a reminder that this pipeline can report the baseline while
+   appearing to test the candidate. A larger held-out corpus is what would turn
+   this into a claim.
 2. **LLM-as-judge reliability for answer correctness.** Survived only
    indirectly (SURE-RAG's GPT-4o judge underperforming an in-domain encoder on
    one task; the abstention results above). The eval plan's answer-quality
@@ -298,6 +332,21 @@ begins, and the script's preflight encodes it:
 | `search` | **No** | requires cognified data |
 | embeddings | mockable | `MOCK_EMBEDDING=true` runs the plumbing with fake vectors; every report from that mode is stamped `quality_meaningful: false` |
 
+Two corrections from the first run that actually went live (2026-08-17):
+
+- **`cognify` does not populate the triplet_text collection.** TRIPLET_COMPLETION
+  returns `NoDataError` until the `create_triplet_embeddings` memify pipeline
+  runs, so `all_modes_live` could never be true. The standup now runs it after
+  cognify.
+- **OpenRouter serves `/v1/embeddings`**, verified with real vectors, so an
+  OpenRouter-only setup gets real embeddings and never needs `MOCK_EMBEDDING`.
+  The bridge in `cognee_setup.py` sets `LLM_ENDPOINT` but not
+  `EMBEDDING_ENDPOINT`, so that setup must set `EMBEDDING_ENDPOINT` and
+  `EMBEDDING_API_KEY` explicitly — otherwise the OpenRouter key is sent to
+  `api.openai.com` and embeddings 401. The preflight's embedding check also
+  only recognises `OPENAI_API_KEY`/`EMBEDDING_API_KEY`, so it reports "no
+  embedding provider" for an OpenRouter-only environment that in fact has one.
+
 ### Going live: three routes, probed 2026-08-16
 
 A second probing round (Docker daemon, container registries, ollama, GitHub
@@ -316,9 +365,14 @@ reports *which* constraint binds.
    environment's network settings — set the key in a gitignored `.env`, and
    `uv run --extra opt python scripts/live_stack.py` stands the stack up with
    the embedded profile. Adding `api.openai.com` also gives real embeddings.
-   Everything below the line then unlocks in order: Phase D's recall-vs-cost
-   gate, the full-pipeline eval, the scoping precision gate, C2's label
-   mining.
+
+   **This was done on 2026-08-17, and the "everything below the line then
+   unlocks" claim it used to carry was wrong.** Egress plus a key unlocked the
+   standup and the GEPA compile-then-judge. It did *not* unlock Phase D's
+   recall-vs-cost gate or C2's label mining: both need an evidence/answer
+   labelled corpus, and `evals/*.jsonl` carry only `expected_mode`. What blocks
+   those two is labels, not infrastructure — and no amount of egress will
+   change that.
 2. **A developer machine with Docker.** `docker compose -f
    docker/docker-compose.yml up` (Postgres + pgGraph) plus the same keys; or
    a local Ollama for a keyless-but-real LLM. Same one-command standup.
