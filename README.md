@@ -30,7 +30,7 @@ Routing is the one part of the pipeline that can be measured honestly without a 
 | Accuracy when the router reports confidence | 93% | 58% of traffic. |
 | Accuracy when the router reports **low** confidence | 73% | 42% of traffic, holding 3 of the 4 misses. This is the band the DSPy stage serves. |
 | NodeSet scoping precision (Phase C1 gate) | **92%** (gate: ≥70%) | Hand-labelled 34-row extension of the held-out corpus, measured through the real router wiring. Labels and index share an author — judgment-anchored, not blind, and the corpus pins known failure modes so they can't be papered over. Recall (also 92%) is reported, not gated: misses are Phase C2's territory. |
-| Routing accuracy, held-out, **GEPA-compiled** router (n=26) | **96%** | The compiled program consulted on all 26, falling back 0 times; stable across 4 repeats. Compiled on the tuning corpus only, judged here on the held-out one. Read it narrowly: 85% → 96% is 3 queries on n=26, and ADR-005 pre-committed to a negative result being the literature-consistent outcome. Not the default router — it loads only via `--dspy-artifact`. |
+| Routing accuracy, held-out, **GEPA-compiled** router (n=26) | **92%** | Compiled on the tuning corpus only, judged here on the held-out one. Not the default router — it loads only via `--dspy-artifact`. This read 96% before the CYPHER→NATURAL_LANGUAGE label correction (2026-08-17); recompiling against the corrected labels lands at 92%, so part of that 96% was the old, semantically wrong labels rather than a better router. 85% → 92% is 2 queries on n=26. |
 
 Reproduce the first two with `uv run python scripts/eval_routing.py` and `uv run python scripts/eval_scoping.py`. Neither needs a Cognee instance, an LLM, or the network — routing and scoping are pure functions of the query, which is why they are the two metrics gated in CI. The compiled-router row is the exception: it calls an LM, so it needs a key (`uv run --extra opt python scripts/eval_routing.py --dspy-artifact artifacts/router_gepa.json`).
 
@@ -154,15 +154,21 @@ uv run python scripts/live_stack.py --preflight-only   # names anything missing
 uv run python scripts/live_stack.py                    # seed + smoke, stamped report
 ```
 
-**The embedded dev profile has no Cypher.** Its graph backend is turso, and
-turso — like cognee's Postgres graph adapter — sets
-`supports_cypher_queries = False`, so `CYPHER` and `NATURAL_LANGUAGE` cannot
-run on it. The standup smoke-tests every mode and names the unsupported ones,
-and the runtime controller escalates past a mode the backend cannot serve
-rather than failing closed, so those queries still get answered by a broader
-mode. But **dev and production differ in which retrieval modes exist**, which
-is worth knowing before attributing a mode-availability bug to your data: use
-`kuzu` or `neo4j` if you need the structural modes.
+**The dev profile is kuzu, and that choice is about Cypher.** turso — like
+cognee's Postgres graph adapter — sets `supports_cypher_queries = False`,
+which costs `CYPHER` *and* `NATURAL_LANGUAGE`, so a turso profile cannot
+exercise two modes the router can choose. kuzu (served through cognee's
+renamed Ladybug adapter) supports both. Its one cost is a one-time
+`INSTALL JSON` extension download from extension.ladybugdb.com on first use,
+which fails behind a restricted egress allowlist — set
+`GRAPH_DATABASE_PROVIDER=turso` to take the offline-capable profile back at
+the price of those two modes.
+
+Either way the standup smoke-tests **every** mode and names any the backend
+cannot serve, and the runtime controller escalates past an unsupported mode
+rather than failing closed. But **dev and production can differ in which
+retrieval modes exist**, which is worth knowing before attributing a
+mode-availability bug to your data.
 
 The preflight boundary is measured, not assumed, and it probes **egress as
 well as keys**: in a sandboxed environment the network allowlist is usually

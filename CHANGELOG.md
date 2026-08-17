@@ -2,6 +2,59 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.13.0] — 2026-08-17
+
+Finishes the audit: structural questions now reach a mode that can execute
+them, and the dev profile is one that has the modes the router can choose.
+
+### Changed
+
+- **Structural questions route to `NATURAL_LANGUAGE`, not `CYPHER`.** Every
+  signal on the old CYPHER rule (`how many`, `list all`, `edges`, `subgraph`,
+  `match all`) describes a question *about* the graph; `CYPHER` takes a Cypher
+  *string*, so the mode could never execute any of them. `CYPHER` is now
+  selected by detecting real Cypher on the **raw** query — normalization
+  lowercases and strips punctuation, destroying the `MATCH (` / `RETURN`
+  evidence that separates a Cypher string from prose about matching services.
+- **All six `CYPHER`-labelled corpus rows were relabelled `NATURAL_LANGUAGE`**
+  (2 tuning, 4 held-out). This is a correction of a semantic error in the
+  labels, not tuning to fit: none of the six was ever a Cypher string. It
+  moves a gated number, so both sides are reported below.
+- **The dev profile is now kuzu, not turso.** turso has no Cypher, which costs
+  `CYPHER` *and* `NATURAL_LANGUAGE` — a dev profile that cannot exercise two
+  modes the router can choose. kuzu (cognee's renamed Ladybug adapter) has
+  both; its cost is a one-time `INSTALL JSON` extension download that fails
+  behind restricted egress, so `GRAPH_DATABASE_PROVIDER=turso` remains the
+  offline-capable fallback. The standup now reports the trade instead of
+  calling kuzu a missing prerequisite.
+- **Smoke tests give each mode input it accepts.** Probing `CYPHER` with the
+  English smoke question reported "unsupported by this backend" on a backend
+  that supports Cypher fine; `CYPHER` now gets a Cypher string.
+
+### Measured
+
+| | before | after |
+|---|---|---|
+| Held-out, deterministic router | 85% | **85%** (same four misses) |
+| Held-out, GEPA-compiled | 96% | **92%** |
+| Standup modes live (kuzu) | 3 of 5 tested | **5 of 5** |
+
+The deterministic router is **unchanged at 85%** with the identical four
+misses — the relabel did not flatter the metric, it made the routed mode one
+that can run. The compiled router is **down**: 96% was measured against the
+old, semantically wrong labels, and recompiling against the corrected ones
+lands at 92%. The README now quotes 92% and says why, rather than keeping a
+number that is no longer reproducible.
+
+Honest remainder: of the four held-out structural questions, three now answer
+end to end on kuzu (escalating past a thin NL result); `ho-struct-002` fails
+closed on a `ValidationError` raised inside cognee's NL→Cypher path. That is
+classified `failure`, not `capability`, so it does **not** escalate —
+deliberately, because widening the capability allow-list to a name as generic
+as `ValidationError` would let real faults escalate silently. `ho-struct-004`
+remains a known routing miss and is now pinned by a test so it cannot be
+quietly relabelled away instead of mechanised.
+
 ## [0.12.0] — 2026-08-17
 
 Acts on the cognee storage audit. A capability gap was being read as a dead

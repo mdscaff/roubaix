@@ -50,6 +50,20 @@ COST_RANK: dict[SearchMode, int] = {
 _NEGATION = re.compile(r"\b(not|no|never|without|lack|lacks|lacking|except|excluding|besides)\b")
 _NEGATION_WINDOW = 24
 
+# Literal Cypher, matched against the RAW query. Deliberately narrow: an
+# uppercase clause keyword followed by a pattern-or-identifier is what a real
+# Cypher string looks like, and what prose does not. "Cypher: list services
+# with no outgoing edges" is a question about the graph and must NOT match —
+# it is natural language that happens to name the language.
+_CYPHER_SYNTAX = re.compile(
+    r"\b(MATCH|MERGE|CREATE|UNWIND)\s*[(\[]|\bRETURN\s+[\w*(]|\bWHERE\s+\w+\s*[.=<>]"
+)
+
+
+def _is_cypher_syntax(raw_query: str) -> bool:
+    """True when the caller supplied Cypher rather than a question about it."""
+    return bool(_CYPHER_SYNTAX.search(raw_query))
+
 
 @dataclass(frozen=True)
 class Signal:
@@ -104,10 +118,18 @@ RULES: tuple[ModeRule, ...] = (
             Signal.of("temporal.status", r"\b(status|incident|outage|rollout)\b", 0.5),
         ),
     ),
+    # Structural intent expressed in natural language goes to NATURAL_LANGUAGE,
+    # which is Cognee's NL->Cypher path. It used to go to CYPHER, and that mode
+    # takes a Cypher *string*: every one of these signals describes a question
+    # ABOUT the graph, not a query written in Cypher, so the mode could never
+    # execute them. Measured 2026-08-17 on a Kuzu backend: all four held-out
+    # structural questions raised CypherSearchError through CYPHER and ran
+    # clean through NATURAL_LANGUAGE. See the CYPHER rule below for the
+    # narrower thing that mode is actually for.
     ModeRule(
-        mode=SearchMode.CYPHER,
+        mode=SearchMode.NATURAL_LANGUAGE,
         evidence_budget=5,
-        rationale="structural graph query",
+        rationale="structural graph question, in natural language",
         signals=(
             Signal.of("structural.explicit", r"\b(cypher|graph query|query the graph)\b", 3.0),
             Signal.of("structural.match", r"\bmatch (all|every|any|nodes?|the)\b", 3.0),
@@ -120,6 +142,17 @@ RULES: tuple[ModeRule, ...] = (
                 1.5,
             ),
         ),
+    ),
+    # CYPHER is for a caller who supplies Cypher. Detection happens on the RAW
+    # query (see _is_cypher_syntax) because normalization lowercases and strips
+    # punctuation, which is exactly the evidence that distinguishes
+    # "MATCH (n) RETURN n" from someone asking to match all the services. This
+    # signal is only the normalized-text backstop.
+    ModeRule(
+        mode=SearchMode.CYPHER,
+        evidence_budget=5,
+        rationale="caller-supplied Cypher",
+        signals=(Signal.of("structural.cypher_syntax", r"\bmatch\b.*\breturn\b", 3.0),),
     ),
     ModeRule(
         mode=SearchMode.GRAPH_COMPLETION,
@@ -225,6 +258,19 @@ class QueryRouter:
                 continue
             scores[rule.mode.value] = sum(s.weight for s in matched)
             fired[rule.mode] = [s.name for s in matched]
+
+        # A caller who wrote Cypher gets CYPHER, whatever the keywords suggest.
+        # Checked against the RAW query: normalization lowercases and strips
+        # punctuation, destroying the `MATCH (` / `RETURN` evidence that
+        # separates a Cypher string from a question about matching services.
+        if _is_cypher_syntax(request.query):
+            return self._decision(
+                self._rule_for(SearchMode.CYPHER),
+                request,
+                signals=["caller.cypher_syntax"],
+                scores=scores,
+                confident=True,  # syntax is evidence, not a guess
+            )
 
         # An explicit freshness contract from the caller overrides scoring:
         # the caller is asserting a requirement, not offering a hint.

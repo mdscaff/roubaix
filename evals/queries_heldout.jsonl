@@ -14,10 +14,10 @@
 {"query_id": "ho-summary-002", "bucket": "broad_summary", "query": "Summarise what our observability stack does.", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}
 {"query_id": "ho-summary-003", "bucket": "broad_summary", "query": "How is the platform team's ownership structured?", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}
 {"query_id": "ho-summary-004", "bucket": "broad_summary", "query": "Explain how a request travels through the edge layer.", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}
-{"query_id": "ho-struct-001", "bucket": "structural_graph", "query": "Cypher: list services with no outgoing edges.", "expected_mode": "CYPHER"}
-{"query_id": "ho-struct-002", "bucket": "structural_graph", "query": "How many nodes are in the billing subgraph?", "expected_mode": "CYPHER"}
-{"query_id": "ho-struct-003", "bucket": "structural_graph", "query": "Match every service annotated as tier one.", "expected_mode": "CYPHER"}
-{"query_id": "ho-struct-004", "bucket": "structural_graph", "query": "Find all edges of type owns between teams and services.", "expected_mode": "CYPHER"}
+{"query_id": "ho-struct-001", "bucket": "structural_graph", "query": "Cypher: list services with no outgoing edges.", "expected_mode": "NATURAL_LANGUAGE"}
+{"query_id": "ho-struct-002", "bucket": "structural_graph", "query": "How many nodes are in the billing subgraph?", "expected_mode": "NATURAL_LANGUAGE"}
+{"query_id": "ho-struct-003", "bucket": "structural_graph", "query": "Match every service annotated as tier one.", "expected_mode": "NATURAL_LANGUAGE"}
+{"query_id": "ho-struct-004", "bucket": "structural_graph", "query": "Find all edges of type owns between teams and services.", "expected_mode": "NATURAL_LANGUAGE"}
 {"query_id": "ho-temp-001", "bucket": "time_sensitive", "query": "What deployments happened in the past week?", "expected_mode": "TEMPORAL"}
 {"query_id": "ho-temp-002", "bucket": "time_sensitive", "query": "Is the checkout outage still ongoing right now?", "expected_mode": "TEMPORAL"}
 {"query_id": "ho-temp-003", "bucket": "time_sensitive", "query": "Give me the most recent schema migration.", "expected_mode": "TEMPORAL"}

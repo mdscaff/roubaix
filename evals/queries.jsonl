@@ -8,8 +8,8 @@
 {"query_id": "multi-002", "bucket": "multi-hop", "query": "Trace the dependency chain from the web app to persistent storage.", "expected_mode": "GRAPH_COMPLETION"}
 {"query_id": "summary-001", "bucket": "broad_summary", "query": "Summarize the themes in our platform architecture.", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}
 {"query_id": "summary-002", "bucket": "broad_summary", "query": "Give an overview of how data flows through the system.", "expected_mode": "GRAPH_SUMMARY_COMPLETION"}
-{"query_id": "struct-001", "bucket": "structural_graph", "query": "Run a graph query to list all nodes with more than three edges.", "expected_mode": "CYPHER"}
-{"query_id": "struct-002", "bucket": "structural_graph", "query": "Match all services connected to the billing node.", "expected_mode": "CYPHER"}
+{"query_id": "struct-001", "bucket": "structural_graph", "query": "Run a graph query to list all nodes with more than three edges.", "expected_mode": "NATURAL_LANGUAGE"}
+{"query_id": "struct-002", "bucket": "structural_graph", "query": "Match all services connected to the billing node.", "expected_mode": "NATURAL_LANGUAGE"}
 {"query_id": "temp-001", "bucket": "time_sensitive", "query": "What is the latest status of the rollout?", "freshness_required": true, "expected_mode": "TEMPORAL"}
 {"query_id": "temp-002", "bucket": "time_sensitive", "query": "What changed in billing configuration this week?", "freshness_required": true, "expected_mode": "TEMPORAL"}
 {"query_id": "temp-003", "bucket": "time_sensitive", "query": "Show current incident updates for production.", "expected_mode": "TEMPORAL"}

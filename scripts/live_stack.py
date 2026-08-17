@@ -18,20 +18,24 @@ The prerequisite boundary below was measured empirically in an offline
 environment (2026-08-16), not assumed:
 
     add      -> works with no LLM and no network, GIVEN: the `s3fs` module
-                (cognee's ingestion imports it even for local files), the
-                embedded `turso` graph adapter (the default `ladybug` adapter
-                downloads a JSON extension from extension.ladybugdb.com at
-                first use, which fails behind restricted egress), and
+                (cognee's ingestion imports it even for local files), a graph
+                adapter that needs no download (`turso`), and
                 COGNEE_SKIP_CONNECTION_TEST=true.
     cognify  -> hard-requires a working LLM (entity extraction has no mock);
                 without one it spins in litellm retries until timeout.
     search   -> requires cognified data, so it inherits the LLM requirement.
 
 The docker-less embedded profile this script configures (SQLite relational +
-LanceDB vector + turso/SQLite graph) is for development and small corpora.
-Cognee documents Postgres-based graph storage as a demo feature too — numbers
-from either are not production-representative, and reports say which profile
-produced them.
+LanceDB vector + kuzu graph) is for development and small corpora. kuzu is the
+default because it is the only embedded backend with Cypher: turso and
+cognee's Postgres adapter both set `supports_cypher_queries = False`, which
+costs CYPHER *and* NATURAL_LANGUAGE. kuzu installs a JSON extension on first
+use, so behind a restricted egress allowlist set GRAPH_DATABASE_PROVIDER=turso
+and accept losing those two modes.
+
+Cognee documents Postgres-based graph storage as a demo feature — numbers from
+any of these profiles are not production-representative, and reports say which
+profile produced them.
 """
 
 from __future__ import annotations
@@ -66,6 +70,14 @@ SMOKE_MODES = (
     "CYPHER",
     "NATURAL_LANGUAGE",
 )
+
+SMOKE_QUERY = "What does the billing service expose?"
+
+# CYPHER takes a Cypher string, so probing it with the English question tests
+# nothing except that English is not Cypher — it reported "unsupported by this
+# backend" on a backend that supports Cypher perfectly well. Each mode gets
+# input it can actually accept.
+SMOKE_QUERIES = {"CYPHER": "MATCH (n) RETURN count(n) AS n_nodes"}
 CORPUS = REPO_ROOT / "evals" / "corpus" / "roubaix_basics.md"
 REPORT_DIR = REPO_ROOT / "evals" / "live"
 
@@ -222,17 +234,17 @@ def preflight(allow_mock_embeddings: bool) -> list[dict]:
 
     graph = os.getenv("GRAPH_DATABASE_PROVIDER", "")
     if graph in ("", "ladybug", "kuzu"):
+        # Not a failure any more: kuzu/ladybug is the intended default because
+        # it is the only embedded backend with Cypher. The download is a real
+        # constraint though, so it is named rather than discovered at runtime.
         checks.append(
             _check(
                 "graph_store",
-                False,
-                "default ladybug/kuzu adapter downloads its JSON extension from "
-                "extension.ladybugdb.com at first use — fails behind restricted egress",
-                fix=(
-                    "this script sets the embedded turso profile "
-                    "(GRAPH_DATABASE_PROVIDER=turso, SQLite-backed, no downloads); "
-                    "or run docker compose -f docker/docker-compose.yml up for pgGraph"
-                ),
+                True,
+                "kuzu/ladybug (embedded, supports CYPHER and NATURAL_LANGUAGE). "
+                "Installs its JSON extension from extension.ladybugdb.com on "
+                "first use; set GRAPH_DATABASE_PROVIDER=turso for an "
+                "offline-capable profile that has no Cypher",
             )
         )
     else:
@@ -243,9 +255,16 @@ def preflight(allow_mock_embeddings: bool) -> list[dict]:
 
 def apply_embedded_profile(work_dir: Path, allow_mock_embeddings: bool) -> dict[str, str]:
     """Set the docker-less embedded profile. Returns what was set, for the report."""
+    # kuzu (which cognee now serves through its renamed Ladybug adapter) is the
+    # default because turso has no Cypher: `supports_cypher_queries = False`
+    # costs CYPHER *and* NATURAL_LANGUAGE, so a turso dev profile cannot
+    # exercise two modes the router can choose. The cost of kuzu is a one-time
+    # `INSTALL JSON` extension download on first use, which fails behind a
+    # restricted egress allowlist — set GRAPH_DATABASE_PROVIDER=turso to take
+    # the offline-capable profile back, at the price of those two modes.
     applied = {
-        "GRAPH_DATABASE_PROVIDER": "turso",
-        "GRAPH_DATASET_DATABASE_HANDLER": "turso",
+        "GRAPH_DATABASE_PROVIDER": "kuzu",
+        "GRAPH_DATASET_DATABASE_HANDLER": "kuzu",
         "COGNEE_SKIP_CONNECTION_TEST": "true",
         "ENABLE_BACKEND_ACCESS_CONTROL": "false",
         "DATA_ROOT_DIRECTORY": str(work_dir / "data"),
@@ -287,7 +306,7 @@ async def seed_and_smoke(dataset: str, mock_embeddings: bool) -> dict:
     for mode_name in SMOKE_MODES:
         mode = SearchMode(mode_name)
         result = await client.search(
-            query="What does the billing service expose?",
+            query=SMOKE_QUERIES.get(mode_name, SMOKE_QUERY),
             mode=mode,
             dataset=dataset,
         )
