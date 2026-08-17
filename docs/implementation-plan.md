@@ -436,11 +436,87 @@ the storage decision turns on them:
   `pggraph` configs are migrated to `postgres` at startup with a WARNING
   (`cognee_setup.migrate_pggraph_provider`) — rewritten rather than failed,
   because that is what they meant, but never silently.
-- **But upstream marks the Postgres graph store a demo feature**, recommending
-  "a graph-native backend such as Kuzu or Neo4j" for production and offering a
-  production-ready Postgres graph adapter **as a licensed commercial product**.
-  A single-Postgres deployment is therefore a licensing question, not only a
-  configuration one — worth resolving before building on it.
+- **The Postgres graph store is a demo feature, and the shipped code says so.**
+  Audited 2026-08-17 against three sources, because the marketing and the
+  product disagree. The docs: *"The Postgres graph store is a **demo
+  feature**"*, *"In production, use a graph-native backend such as Kuzu or
+  Neo4j for the graph layer"*, *"A production-ready Postgres graph adapter is
+  available as a licensed product"*. The **installed 1.5.0 source** carries the
+  same warning in three places, including the adapter's module and class
+  docstrings: *"DEMO: Using Postgres as a graph store is currently a demo
+  feature and is not production-ready … rely on a graph-native backend such as
+  Kuzu or Neo4j for production workloads."* The `Just Postgres` blog post says
+  the opposite (*"Postgres is the default we'd recommend for most cognee
+  deployments"*). **Weight the code and the docs over the blog.**
+
+  The reconcilable reading: the single-Postgres story holds for *relational +
+  vector* (pgvector); it is specifically the **graph layer** that is demo. Note
+  also that nothing warns at **runtime** — configuring
+  `GRAPH_DATABASE_PROVIDER=postgres` produces no log line saying you are on a
+  demo adapter, so this cannot be discovered by running it.
+
+### CYPHER mode is dead in Roubaix on every backend (found 2026-08-17)
+
+The audit above turned up something more urgent than the storage choice, and
+it is live today:
+
+| Backend | `supports_cypher_queries` | Roubaix CYPHER result |
+|---|---|---|
+| `postgres`, `turso` | **False** | `SearchTypeNotSupported` |
+| `kuzu`, `neo4j`, ladybug, neptune | True (interface default) | `CypherSearchError` |
+
+Both fail, for *different* reasons, and the second is ours: **Roubaix sends
+natural-language text to a mode that expects Cypher syntax.** Measured on a
+Kuzu-backed live stack: the literal query `MATCH (n) RETURN count(n)` runs
+clean (`degraded=False`), while all four held-out CYPHER-labelled questions
+raise `CypherSearchError`. The same four questions run **non-degraded** through
+`SearchMode.NATURAL_LANGUAGE`, which is cognee's NL→Cypher path.
+
+The blast radius is larger than "one mode is broken", because of how it
+interacts with the controller: on the turso stack this repository currently
+ships, 3 of the 4 CYPHER-routed held-out queries fail closed with
+`retry_count=0` and an **empty escalation chain** — they never escalate. The
+cause is `runtime_controller.py`'s first rule, which fails closed on any
+degraded retrieval because *"escalating cannot fix a substrate that is down"*.
+That is right for an outage and wrong for a **capability gap**:
+`SearchTypeNotSupported` is a permanent statement that this backend will never
+serve this mode, and escalating *would* fix it. (The one query that survived,
+`ho-struct-004`, did so only because the router mislabelled it into
+TRIPLET_COMPLETION and escalated normally.)
+
+None of this was caught earlier because `live_stack.py`'s `SMOKE_MODES` covers
+CHUNKS, TRIPLET_COMPLETION and GRAPH_COMPLETION only — CYPHER has never been
+smoke-tested against a live stack.
+### Recommended storage and retrieval strategy (2026-08-17)
+
+Ordered, and each step is independently useful:
+
+1. **Do not put the graph layer on Postgres.** Both the docs and the shipped
+   code call it not production-ready, and it silently costs CYPHER
+   (`supports_cypher_queries = False`). If the single-Postgres operational
+   story is the goal, take it for relational + pgvector and put the graph on
+   Kuzu (single-writer, file-based, fine for dev and single-user) or Neo4j
+   (concurrent, upstream's production recommendation). Revisit only if the
+   licensed adapter is purchased.
+2. **Let the sidecar own this.** With remote mode, `COGNEE_SERVICE_URL` points
+   at a Cognee service and that service picks its own backend, so the choice
+   above is a deployment decision rather than a Roubaix one. This is the main
+   argument for the sidecar over the embedded profile.
+3. **Fix CYPHER routing before trusting structural queries.** Route
+   natural-language structural questions to `NATURAL_LANGUAGE` (verified
+   working) and reserve `CYPHER` for literal Cypher strings. This is a router
+   change plus a relabel of the four `structural_graph` held-out rows, so it
+   moves a measured number and should be run as a gate, not assumed.
+4. **Teach the controller to tell a capability gap from an outage.**
+   `SearchTypeNotSupported` (and a mode the engine declares unsupported)
+   should escalate down the ladder instead of failing closed; a genuine
+   substrate failure should keep failing closed as it does now.
+5. **Add CYPHER/NATURAL_LANGUAGE to `SMOKE_MODES`**, so a dead retrieval mode
+   cannot pass a green standup again.
+6. **If the embedded turso profile stays the dev default, say in the README
+   that it has no Cypher** — otherwise dev and production differ in which
+   retrieval modes exist, which is the hardest class of bug to attribute.
+
 - **`cognee-rs`** (github.com/topoteretes/cognee-rs) is a separate Rust port
   targeting on-device and edge memory (phone, wearable, embedded), exposing the
   same four-verb API. It is positioned as a companion to the Python SDK for
