@@ -376,19 +376,57 @@ reports *which* constraint binds.
 2. **A developer machine with Docker.** `docker compose -f
    docker/docker-compose.yml up` (Postgres + pgGraph) plus the same keys; or
    a local Ollama for a keyless-but-real LLM. Same one-command standup.
-3. **Cognee Cloud (cognee.ai) with an API key.** Honestly the least ready:
-   the installed SDK ships **no cloud transport**, `CogneeClient` implements
-   none, and cognee.ai is egress-blocked from this environment, so its API
-   shape cannot even be read from here. The `COGNEE_API_KEY` /
-   `COGNEE_BASE_URL` settings exist but are documented as unused. Building
-   the REST client is a real task that needs reachable API docs — recorded
-   here so a set key is never mistaken for a working path, and the preflight
-   says exactly that if it finds one.
+3. **A Cognee service — self-hosted sidecar or Cognee Cloud.** ~~The least
+   ready: the installed SDK ships no cloud transport.~~ **Corrected
+   2026-08-17: that was wrong, and it was wrong when written.** The installed
+   SDK (1.4.2) exposes `cognee.serve(url=..., api_key=...) -> CloudClient`,
+   documented for two modes and verified by inspection here:
+
+       await cognee.serve(url="http://localhost:8000")        # sidecar
+       await cognee.serve(url="https://<tenant>.cognee.ai", api_key="ck_...")
+       await cognee.serve()                                   # cloud, Auth0 device flow
+
+   One API covers both a self-hosted Cognee container and a hosted tenant, and
+   in either case that service — not this repository — owns storage. What is
+   still true is the second half: **`CogneeClient` implements none of this.**
+   It drives the embedded in-process SDK, so pointing Roubaix at a Cognee
+   service is a real task (a remote mode on `CogneeClient`), not a config
+   change. Note the env var names differ from this repo's settings: cognee
+   reads `COGNEE_SERVICE_URL`, while `app/core/config.py` declares
+   `COGNEE_BASE_URL`.
 
 An API key is a secret: it belongs in the gitignored `.env` or the
 environment's secret store, never in a committed file or a chat transcript if
 avoidable — and a key that has been shared around before is a good candidate
 for rotation before use.
+
+### Cognee version and graph-store facts (checked 2026-08-17)
+
+Checked against PyPI and the installed package rather than assumed, because
+the storage decision turns on them:
+
+- **Pinned 1.4.2; latest is 1.5.0** (released 2026-08-15). The 1.5.0 notes
+  state no user-facing breaking changes — migration hardening, batched
+  re-embed/rekey, `LLM_TEMPERATURE`/`LLM_SEED`, Windows TLS. A low-risk bump,
+  but it has not been run here, so it stays a proposal.
+- **Postgres is a native graph provider already**, in 1.4.2: the installed
+  adapters are `kuzu, ladybug, neo4j_driver, neptune_driver, postgres, turso`.
+  So `GRAPH_DATABASE_PROVIDER=postgres` needs no community package, and this
+  repo's `register_pggraph_adapter()` (the `cognee-community-graph-adapter-pggraph`
+  path, `GRAPH_DATABASE_PROVIDER=pggraph`) is the **outdated** route.
+- **But upstream marks the Postgres graph store a demo feature**, recommending
+  "a graph-native backend such as Kuzu or Neo4j" for production and offering a
+  production-ready Postgres graph adapter **as a licensed commercial product**.
+  A single-Postgres deployment is therefore a licensing question, not only a
+  configuration one — worth resolving before building on it.
+- **`cognee-rs`** (github.com/topoteretes/cognee-rs) is a separate Rust port
+  targeting on-device and edge memory (phone, wearable, embedded), exposing the
+  same four-verb API. It is positioned as a companion to the Python SDK for
+  edge deployments, not as the way to run a server-side sidecar, so it does not
+  look like a fit for this repository's path. Upstream marketing also describes
+  1.0 as "rebuilt around a Rust core", which is a different claim from "the
+  Python SDK is a binding over cognee-rs"; that ambiguity is unresolved here
+  and worth a direct question before planning around it.
 
 ## Sequencing and dependencies
 

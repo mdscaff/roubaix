@@ -1,0 +1,48 @@
+{
+  "select.predict": {
+    "traces": [],
+    "train": [],
+    "demos": [],
+    "signature": {
+      "instructions": "Pick the cheapest retrieval mode that can fully answer the query.\n\nModes, cheapest first: CHUNKS (local text lookup), RAG_COMPLETION,\nTRIPLET_COMPLETION (one-hop relationships between named entities),\nGRAPH_COMPLETION (multi-hop, impact analysis, dependency chains),\nGRAPH_SUMMARY_COMPLETION (broad explanation over many entities), CYPHER\n(structural queries about graph topology itself — nodes, edges, degree),\nNATURAL_LANGUAGE, TEMPORAL (anything whose answer changes with time).\n\nPrefer a cheaper mode unless the query demonstrably needs graph traversal,\nstructural querying, or freshness. Over-selecting an expensive mode is a\nfailure even when the resulting answer is correct.\n\nYou are being consulted only for queries the deterministic rule engine could\nnot classify confidently, so the rule scores you are given are weak or\nconflicting by construction. Treat them as one signal, not as the answer.",
+      "fields": [
+        {
+          "prefix": "Query:",
+          "description": "The user's query, lowercased and depunctuated."
+        },
+        {
+          "prefix": "Rule Scores:",
+          "description": "Per-mode scores from the deterministic rule engine. Empty if nothing fired."
+        },
+        {
+          "prefix": "Fired Signals:",
+          "description": "Named patterns that matched, e.g. 'multihop.impact'. Empty if none."
+        },
+        {
+          "prefix": "Reasoning:",
+          "description": "${reasoning}"
+        },
+        {
+          "prefix": "Mode:",
+          "description": "The chosen retrieval mode."
+        },
+        {
+          "prefix": "Evidence Budget:",
+          "description": "Items to retrieve, 4-12."
+        },
+        {
+          "prefix": "Rationale:",
+          "description": "One sentence naming the deciding evidence."
+        }
+      ]
+    },
+    "lm": null
+  },
+  "metadata": {
+    "dependency_versions": {
+      "python": "3.12",
+      "dspy": "3.3.0",
+      "cloudpickle": "3.1"
+    }
+  }
+}
