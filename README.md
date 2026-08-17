@@ -130,17 +130,19 @@ uv run python scripts/demo_e2e.py --out demo_transcript.md
 
 Without a live Cognee instance, retrieval returns stub evidence flagged `degraded`, and the controller **fails closed** rather than answering from it. Set `ROUBAIX_ALLOW_STUB_EVIDENCE=true` to exercise the full pipeline anyway — that is what CI does.
 
-### Optional: Cognee + pgGraph locally
+### Optional: Cognee + Postgres locally
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d
-# Set GRAPH_DATABASE_PROVIDER=pggraph and DB_* vars in .env
+# Set GRAPH_DATABASE_PROVIDER=postgres and DB_* vars in .env
 
-uv sync --extra opt --extra pggraph
-uv run --extra opt --extra pggraph python scripts/seed_cognee.py
+uv sync --extra opt --extra postgres
+uv run --extra opt --extra postgres python scripts/seed_cognee.py
 ```
 
-Note: the Postgres graph backend is a development convenience. Cognee documents it as a demo feature and directs production graph workloads to a graph-native backend, so numbers produced on it are not production-representative.
+Cognee ships the Postgres graph adapter natively, so no community package is needed. The old `pggraph` provider is migrated to `postgres` at startup with a warning — it pinned `cognee==1.4.2` and blocked every upgrade.
+
+Note: the Postgres graph backend is a development convenience. Cognee documents it as a demo feature, directs production graph workloads to a graph-native backend such as Kuzu or Neo4j, and sells a production-ready Postgres adapter as a licensed product — so numbers produced on it are not production-representative.
 
 ### Stand up live Cognee
 

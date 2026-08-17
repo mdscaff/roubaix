@@ -419,15 +419,23 @@ for rotation before use.
 Checked against PyPI and the installed package rather than assumed, because
 the storage decision turns on them:
 
-- **Pinned 1.4.2; latest is 1.5.0** (released 2026-08-15). The 1.5.0 notes
-  state no user-facing breaking changes — migration hardening, batched
-  re-embed/rekey, `LLM_TEMPERATURE`/`LLM_SEED`, Windows TLS. A low-risk bump,
-  but it has not been run here, so it stays a proposal.
-- **Postgres is a native graph provider already**, in 1.4.2: the installed
+- **Now on 1.5.0** (released 2026-08-15), bumped and re-measured 2026-08-17:
+  the standup came up with all three smoke modes live and
+  `quality_meaningful: true`, remote mode behaved identically against a real
+  1.5.0 REST server, and both routing numbers held exactly (baseline 85%,
+  GEPA-compiled 96%). Upstream reported no user-facing breaking changes and
+  none were observed.
+- **The bump was blocked by the pgGraph extra**, which is worth recording
+  because it is the general shape of the risk: the community adapter pinned
+  `cognee==1.4.2` *exactly*, so a single community package made every future
+  cognee upgrade unresolvable. It is retired here in favour of the native
+  adapter.
+- **Postgres is a native graph provider already**, since 1.4.2: the installed
   adapters are `kuzu, ladybug, neo4j_driver, neptune_driver, postgres, turso`.
-  So `GRAPH_DATABASE_PROVIDER=postgres` needs no community package, and this
-  repo's `register_pggraph_adapter()` (the `cognee-community-graph-adapter-pggraph`
-  path, `GRAPH_DATABASE_PROVIDER=pggraph`) is the **outdated** route.
+  `GRAPH_DATABASE_PROVIDER=postgres` needs no community package.
+  `pggraph` configs are migrated to `postgres` at startup with a WARNING
+  (`cognee_setup.migrate_pggraph_provider`) — rewritten rather than failed,
+  because that is what they meant, but never silently.
 - **But upstream marks the Postgres graph store a demo feature**, recommending
   "a graph-native backend such as Kuzu or Neo4j" for production and offering a
   production-ready Postgres graph adapter **as a licensed commercial product**.

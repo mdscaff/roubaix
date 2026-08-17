@@ -36,7 +36,9 @@ temporal = [
 ]
 opt = [
   "dspy>=3.3.0",
-  "cognee>=1.4.2",
+  # 1.5.0 floor: 1.4.2 is what the live stack and remote mode were first
+  # measured on, but 1.5.0 is what they are measured on now (2026-08-17).
+  "cognee>=1.5.0",
   "datasketch>=2.0.0",
   # Imported opportunistically by app/core/tokens.py. It was previously only
   # present transitively via cognee, so token estimates silently changed
@@ -62,9 +64,13 @@ eval = [
   # a hard requirement, not a preference — see app/integrations/langfuse_tracing.py.
   "langfuse>=4.0.0",
 ]
-pggraph = [
+# Postgres-backed graph. The community pgGraph adapter that used to live here
+# is retired: it pinned `cognee==1.4.2` exactly, which made every cognee
+# upgrade unresolvable, and cognee ships a native `postgres` graph adapter that
+# does the same job. Set GRAPH_DATABASE_PROVIDER=postgres; `pggraph` is
+# migrated automatically with a warning (cognee_setup.migrate_pggraph_provider).
+postgres = [
   "asyncpg>=0.31.0",
-  "cognee-community-graph-adapter-pggraph @ git+https://github.com/topoteretes/cognee-community.git#subdirectory=packages/graph/pggraph",
 ]
 
 [tool.setuptools.packages.find]
@@ -111,7 +117,7 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["cognee", "cognee.*", "cognee_community_graph_adapter_pggraph", "dspy", "dspy.*"]
+module = ["cognee", "cognee.*", "dspy", "dspy.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

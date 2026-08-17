@@ -116,22 +116,41 @@ def apply_cognee_env_overrides(overrides: dict[str, str] | None = None) -> dict[
     return resolved
 
 
-def register_pggraph_adapter() -> bool:
-    """Register the community pgGraph adapter when configured."""
+def migrate_pggraph_provider() -> bool:
+    """Redirect the retired ``pggraph`` provider onto cognee's native Postgres.
+
+    The community adapter (``cognee-community-graph-adapter-pggraph``) is
+    retired here, for a reason stronger than tidiness: it pins ``cognee==1.4.2``
+    exactly, so keeping it made every future cognee upgrade unresolvable. Cognee
+    ships a native ``postgres`` graph adapter — in 1.4.2 already — which is the
+    same Postgres-backed graph the community package existed to provide.
+
+    Existing ``GRAPH_DATABASE_PROVIDER=pggraph`` configs are rewritten to
+    ``postgres`` rather than failed, since that is what they meant, but the
+    rewrite is logged at WARNING: a storage backend must never change silently.
+
+    Returns True when a rewrite happened.
+
+    Note (upstream, checked 2026-08-17): cognee documents its Postgres graph
+    store as a *demo* feature, recommends Kuzu or Neo4j for production, and
+    sells a production-ready Postgres graph adapter as a licensed product.
+    """
     provider = os.getenv("GRAPH_DATABASE_PROVIDER", settings.graph_database_provider or "")
     if provider != "pggraph":
         return False
-    try:
-        from cognee_community_graph_adapter_pggraph import (
-            register,  # type: ignore[import-not-found]
-        )
-    except ImportError:
-        logger.warning(
-            "GRAPH_DATABASE_PROVIDER=pggraph but cognee-community-graph-adapter-pggraph "
-            "is not installed. Install from cognee-community/packages/graph/pggraph."
-        )
-        return False
-    register()
+    logger.warning(
+        "graph_provider_migrated",
+        extra={
+            "from": "pggraph",
+            "to": "postgres",
+            "reason": (
+                "the community pgGraph adapter is retired (it pinned cognee==1.4.2); "
+                "cognee's native postgres graph adapter replaces it. Update "
+                "GRAPH_DATABASE_PROVIDER=postgres in your .env to silence this."
+            ),
+        },
+    )
+    os.environ["GRAPH_DATABASE_PROVIDER"] = "postgres"
     return True
 
 
@@ -163,16 +182,20 @@ def configure_cognee() -> dict[str, Any]:
         }
         return _COGNEE_STATUS
 
-    pggraph_registered = register_pggraph_adapter()
+    pggraph_migrated = migrate_pggraph_provider()
 
     runtime_sets: dict[str, str] = {}
-    if settings.graph_database_provider:
-        cognee.config.set("graph_database_provider", settings.graph_database_provider)
-        runtime_sets["graph_database_provider"] = settings.graph_database_provider
+    # Read the provider back from the environment, not from settings: the
+    # pggraph migration rewrites it there, and pushing the stale settings value
+    # into cognee would hand it a provider name that no longer exists.
+    effective_provider = os.getenv("GRAPH_DATABASE_PROVIDER") or settings.graph_database_provider
+    if effective_provider:
+        cognee.config.set("graph_database_provider", effective_provider)
+        runtime_sets["graph_database_provider"] = effective_provider
 
     _COGNEE_STATUS = {
         "configured": True,
-        "pggraph_registered": pggraph_registered,
+        "pggraph_migrated": pggraph_migrated,
         "llm_model": os.getenv("LLM_MODEL"),
         "embedding_model": os.getenv("EMBEDDING_MODEL"),
         "embedding_dimensions": os.getenv("EMBEDDING_DIMENSIONS"),

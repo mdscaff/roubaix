@@ -2,6 +2,53 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.11.0] — 2026-08-17
+
+Points Roubaix at a Cognee *service* instead of only an in-process SDK, and
+gets off a pin that had quietly frozen the dependency.
+
+### Added
+
+- **Remote mode for `CogneeClient`.** `COGNEE_SERVICE_URL` selects a
+  self-hosted Cognee sidecar or a Cognee Cloud tenant, connected via
+  `cognee.serve()`; that service then owns storage, which removes the
+  `GRAPH_DATABASE_*` question from this repository entirely. Verified end to
+  end against a real `cognee.api.client` REST server on both 1.4.2 and 1.5.0:
+  remote search returned live evidence and a full orchestrator round trip
+  produced a grounded, cited, non-degraded answer. Remote wins over embedded
+  when a URL is set — running an in-process SDK against a different store is
+  the divergence that surfaces as "why is my data missing". Failures stay
+  flagged-degraded and name the substrate (`remote_search_failed` vs
+  `live_search_failed`). Two gaps recorded rather than hidden: the remote
+  search endpoint has no `node_name_filter_operator` parameter, so multi-NodeSet
+  scope loses its explicit OR (`node_name_filter_operator_sent: false` on every
+  result); and remote ingest skips `embed_triplets`, because memify belongs to
+  the instance that owns the store.
+- `COGNEE_BASE_URL` still resolves alongside the `COGNEE_SERVICE_URL` name
+  cognee itself reads, so existing `.env` files do not silently fall back to
+  the embedded SDK against an empty store.
+
+### Changed
+
+- **cognee 1.4.2 → 1.5.0**, re-measured rather than assumed: standup came up
+  with all three smoke modes live and `quality_meaningful: true`; remote mode
+  behaved identically; routing held exactly (baseline 85%, GEPA-compiled 96%).
+- **The community pgGraph adapter is retired** — and it was the thing blocking
+  the bump: `cognee-community-graph-adapter-pggraph` pinned `cognee==1.4.2`
+  *exactly*, so one community package made every cognee upgrade unresolvable.
+  Cognee has shipped a native `postgres` graph adapter since 1.4.2 that does
+  the same job. The `pggraph` extra becomes `postgres` (just `asyncpg`), and
+  `GRAPH_DATABASE_PROVIDER=pggraph` is migrated to `postgres` at startup with
+  a WARNING — rewritten because that is what it meant, logged because a
+  storage backend must never change silently.
+
+### Noted
+
+Upstream documents its Postgres graph store as a **demo feature**, recommends
+Kuzu or Neo4j for production, and sells a production-ready Postgres graph
+adapter as a licensed product. A single-Postgres deployment is therefore a
+licensing question, not only a configuration one.
+
 ## [0.10.0] — 2026-08-17
 
 First session with LLM egress and a key. The headline is not a feature: both
