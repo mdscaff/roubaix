@@ -246,6 +246,19 @@ async def seed_and_smoke(dataset: str, mock_embeddings: bool) -> dict:
     await cognee.cognify(datasets=[dataset])
     report["seed"] = {"corpus": str(CORPUS), "bytes": len(content)}
 
+    # cognify alone does NOT populate the triplet_text collection: measured on
+    # cognee 1.4.2, TRIPLET_COMPLETION returns NoDataError until the memify
+    # pipeline embeds the triples. Without this the mode is permanently
+    # degraded and `all_modes_live` can never be true.
+    from cognee.memify_pipelines.create_triplet_embeddings import create_triplet_embeddings
+    from cognee.modules.users.methods import get_default_user
+
+    try:
+        await create_triplet_embeddings(user=await get_default_user(), dataset=dataset)
+        report["triplet_embeddings"] = {"ok": True}
+    except Exception as exc:  # noqa: BLE001 - name the boundary, keep the smoke results
+        report["triplet_embeddings"] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
     for mode_name in SMOKE_MODES:
         mode = SearchMode(mode_name)
         result = await client.search(
@@ -344,9 +357,16 @@ def main() -> None:
         print(f"FAILED at: {report['failed']}", file=sys.stderr)
         raise SystemExit(1)
     if not report.get("quality_meaningful"):
+        # Two distinct causes reach here; naming the wrong one sends the reader
+        # hunting for a key that is already set.
+        if mock_embeddings:
+            reason = "ranking is meaningless (mock embeddings)"
+        else:
+            degraded = [s["mode"] for s in report.get("smoke", []) if not s["live"]]
+            reason = f"embeddings are real, but these modes did not go live: {', '.join(degraded)}"
         print(
-            "Stack is up in plumbing-only mode: retrieval executes, ranking is "
-            "meaningless (mock embeddings). Do not quote numbers from this stack.",
+            f"Stack is up in plumbing-only mode: retrieval executes, {reason}. "
+            "Do not quote numbers from this stack.",
         )
     else:
         print("Live stack is up. evals/live reports from this stack are real retrieval.")

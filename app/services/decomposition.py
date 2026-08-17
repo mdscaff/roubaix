@@ -102,7 +102,19 @@ class DspyDecomposer:
                 )
                 subqueries: str = dspy.OutputField(desc="One sub-question per line.")
 
-            self._program = dspy.ChainOfThought(DecomposeMultiHop)
+            program = dspy.ChainOfThought(DecomposeMultiHop)
+            # Bind the LM to this program rather than calling dspy.configure():
+            # nothing in the serving path configures a global LM, so without
+            # this every decompose() raised "no LM loaded", latched _failed,
+            # and degraded to single-query retrieval — silently, because that
+            # is the designed fallback. Measured 2026-08-17: decomposition
+            # fired 0/46 queries before this binding existed. Setting it per
+            # program also avoids stomping a caller's global config (the GEPA
+            # compile configures its own).
+            from app.integrations.dspy_program import inference_lm
+
+            program.set_lm(inference_lm())
+            self._program = program
         return self._program
 
 

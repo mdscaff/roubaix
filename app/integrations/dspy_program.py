@@ -169,7 +169,10 @@ class DspyRouter(QueryRouter):
     ) -> None:
         super().__init__(normalizer=(baseline or QueryRouter()).normalizer, rules=RULES)
         self.baseline = baseline or QueryRouter()
-        self.program = program or RouterProgram(baseline=self.baseline)
+        if program is None:
+            program = RouterProgram(baseline=self.baseline)
+            program.set_lm(inference_lm())  # see inference_lm: nothing else binds one
+        self.program = program
         self.llm_calls = 0
         self.fallbacks = 0
 
@@ -221,10 +224,34 @@ class DspyRouter(QueryRouter):
         )
 
 
+def inference_lm() -> dspy.LM:
+    """The LM every DSPy inference path in Roubaix calls.
+
+    DSPy resolves its LM from a global set by ``dspy.configure``. Only the GEPA
+    compile script ever called that, so in the serving and eval processes every
+    DSPy program raised "No LM is loaded" on first use and took its documented
+    fallback. Measured 2026-08-17: the compiled router fell back on 18/18
+    queries it was consulted on, reporting exactly the deterministic baseline's
+    85% — a compile-then-judge that never judged the compiled program. Binding
+    per program instead of globally keeps the compile script's own
+    ``dspy.configure`` authoritative during a compile.
+    """
+    from app.core.config import settings
+    from app.integrations.cognee_setup import resolve_llm_api_key
+
+    return dspy.LM(
+        settings.default_model,
+        api_base=settings.default_llm_endpoint,
+        api_key=resolve_llm_api_key(),
+        temperature=0.0,
+    )
+
+
 def load_compiled(artifact: Path, baseline: QueryRouter | None = None) -> RouterProgram:
     """Load a GEPA-compiled program from *artifact* (plain-text JSON)."""
     program = RouterProgram(baseline=baseline)
     program.load(path=str(artifact))
+    program.set_lm(inference_lm())
     return program
 
 

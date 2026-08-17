@@ -42,6 +42,12 @@ from app.services.synthesizer import AnswerSynthesizer
 # against a controller policy change accidentally creating an unbounded loop.
 MAX_ATTEMPTS = 6
 
+# Sentinel for "caller said nothing about a decomposer, build the default one".
+# Without it `decomposer=None` reads as "use the default", so there is no way to
+# construct an orchestrator with decomposition off — callers asking for off
+# silently got it on. Omitting the argument still builds the default.
+_DEFAULT = cast(SubQueryDecomposer, object())
+
 
 class QueryOrchestrator:
     def __init__(
@@ -53,7 +59,7 @@ class QueryOrchestrator:
         synthesizer: AnswerSynthesizer | None = None,
         normalizer: QueryNormalizer | None = None,
         cache: ContentAddressedCache | None = None,
-        decomposer: SubQueryDecomposer | None = None,
+        decomposer: SubQueryDecomposer | None = _DEFAULT,
         graph: InMemoryGraph | None = None,
     ) -> None:
         self.router = router
@@ -63,7 +69,7 @@ class QueryOrchestrator:
         self.synthesizer = synthesizer or AnswerSynthesizer()
         self.normalizer = normalizer or QueryNormalizer()
         self.cache = cache or ContentAddressedCache()
-        self.decomposer = decomposer if decomposer is not None else build_decomposer()
+        self.decomposer = build_decomposer() if decomposer is _DEFAULT else decomposer
         self.graph = graph if graph is not None else build_graph()
         self.graph_answerer = GraphAnswerer(self.graph) if self.graph is not None else None
 
