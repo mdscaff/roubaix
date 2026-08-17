@@ -56,7 +56,16 @@ from app.integrations.cognee_setup import (
     resolve_llm_api_key,
 )
 
-SMOKE_MODES = ("CHUNKS", "TRIPLET_COMPLETION", "GRAPH_COMPLETION")
+# Every mode the router can choose gets smoke-tested. CYPHER and
+# NATURAL_LANGUAGE were absent, which is exactly why a permanently dead CYPHER
+# mode passed a green standup for as long as it did.
+SMOKE_MODES = (
+    "CHUNKS",
+    "TRIPLET_COMPLETION",
+    "GRAPH_COMPLETION",
+    "CYPHER",
+    "NATURAL_LANGUAGE",
+)
 CORPUS = REPO_ROOT / "evals" / "corpus" / "roubaix_basics.md"
 REPORT_DIR = REPO_ROOT / "evals" / "live"
 
@@ -286,6 +295,11 @@ async def seed_and_smoke(dataset: str, mock_embeddings: bool) -> dict:
             {
                 "mode": mode_name,
                 "live": not result.degraded,
+                # A mode the backend cannot serve is a different fact from a
+                # mode that broke: turso and postgres have no Cypher at all,
+                # and calling that "retrieval is degraded" would condemn a
+                # perfectly good stack on a capability the profile never had.
+                "unsupported_by_backend": result.degraded_kind == "capability",
                 "degraded_reason": result.degraded_reason,
                 "items": sum(
                     len(getattr(result.evidence, f))
@@ -301,8 +315,20 @@ async def seed_and_smoke(dataset: str, mock_embeddings: bool) -> dict:
     graph = InMemoryGraph()
     report["memgraph_warm_loaded_edges"] = await warm_load_from_cognee(graph)
 
+    unsupported = [s["mode"] for s in report["smoke"] if s["unsupported_by_backend"]]
+    broken = [
+        s["mode"]
+        for s in report["smoke"]
+        if not s["live"] and not s["unsupported_by_backend"]
+    ]
     report["all_modes_live"] = all(s["live"] for s in report["smoke"])
-    report["quality_meaningful"] = report["all_modes_live"] and not mock_embeddings
+    report["unsupported_modes"] = unsupported
+    report["broken_modes"] = broken
+    # Quality is about whether the evidence and ranking can be trusted, so a
+    # mode this backend never had must not condemn it — but a mode that broke
+    # must. Reported separately from all_modes_live so neither fact hides the
+    # other.
+    report["quality_meaningful"] = not broken and not mock_embeddings
     return report
 
 
@@ -372,14 +398,25 @@ def main() -> None:
     if report.get("failed"):
         print(f"FAILED at: {report['failed']}", file=sys.stderr)
         raise SystemExit(1)
+    # An unsupported mode is reported on BOTH paths. Printing it only on the
+    # failure path is how a dead retrieval mode hides behind a green standup —
+    # which is precisely what happened with CYPHER.
+    unsupported = report.get("unsupported_modes") or []
+    if unsupported:
+        print(
+            f"\nUnsupported by this graph backend: {', '.join(unsupported)}. "
+            "The router can still choose these modes; the controller escalates "
+            "past them. Use kuzu or neo4j if you need them."
+        )
+
     if not report.get("quality_meaningful"):
-        # Two distinct causes reach here; naming the wrong one sends the reader
+        # Distinct causes reach here; naming the wrong one sends the reader
         # hunting for a key that is already set.
         if mock_embeddings:
             reason = "ranking is meaningless (mock embeddings)"
         else:
-            degraded = [s["mode"] for s in report.get("smoke", []) if not s["live"]]
-            reason = f"embeddings are real, but these modes did not go live: {', '.join(degraded)}"
+            broken = report.get("broken_modes") or []
+            reason = f"embeddings are real, but these modes broke: {', '.join(broken)}"
         print(
             f"Stack is up in plumbing-only mode: retrieval executes, {reason}. "
             "Do not quote numbers from this stack.",

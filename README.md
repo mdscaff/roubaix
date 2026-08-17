@@ -154,6 +154,16 @@ uv run python scripts/live_stack.py --preflight-only   # names anything missing
 uv run python scripts/live_stack.py                    # seed + smoke, stamped report
 ```
 
+**The embedded dev profile has no Cypher.** Its graph backend is turso, and
+turso — like cognee's Postgres graph adapter — sets
+`supports_cypher_queries = False`, so `CYPHER` and `NATURAL_LANGUAGE` cannot
+run on it. The standup smoke-tests every mode and names the unsupported ones,
+and the runtime controller escalates past a mode the backend cannot serve
+rather than failing closed, so those queries still get answered by a broader
+mode. But **dev and production differ in which retrieval modes exist**, which
+is worth knowing before attributing a mode-availability bug to your data: use
+`kuzu` or `neo4j` if you need the structural modes.
+
 The preflight boundary is measured, not assumed, and it probes **egress as
 well as keys**: in a sandboxed environment the network allowlist is usually
 the binding constraint (a working key cannot reach a blocked provider). Three

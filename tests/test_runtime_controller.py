@@ -1,4 +1,10 @@
-from app.domain.models import PackedEvidence, QueryRequest, RouteDecision, SearchMode
+from app.domain.models import (
+    DegradedKind,
+    PackedEvidence,
+    QueryRequest,
+    RouteDecision,
+    SearchMode,
+)
 from app.services.runtime_controller import (
     CheckErrorPolicy,
     ControlAction,
@@ -12,6 +18,7 @@ def _packed(
     items: list[str] | None = None,
     *,
     degraded: bool = False,
+    degraded_kind: DegradedKind | None = None,
 ) -> PackedEvidence:
     items = items or []
     return PackedEvidence(
@@ -20,6 +27,7 @@ def _packed(
         evidence_items=items,
         degraded=degraded,
         degraded_reason="live_search_failed: RuntimeError" if degraded else None,
+        degraded_kind=degraded_kind,
     )
 
 
@@ -163,6 +171,78 @@ def test_fails_closed_on_degraded_evidence_by_default() -> None:
     )
     assert decision.action is ControlAction.FAIL_CLOSED
     assert decision.reason.startswith("degraded_retrieval:")
+
+
+def test_a_capability_gap_escalates_instead_of_failing_closed() -> None:
+    """A backend declaring a mode unsupported is not an outage. Retrying that
+    mode reproduces it forever; the ladder is the designed recovery. Measured
+    on the turso profile: 3 of 4 CYPHER-routed held-out queries failed closed
+    with retry_count=0 and an empty escalation chain before this."""
+    controller = RuntimeController(allow_stub_evidence=False)
+    route = RouteDecision(mode=SearchMode.CYPHER, rationale="test")
+    decision = controller.decide(
+        QueryRequest(query="how many nodes are in the billing subgraph"),
+        route,
+        _packed(
+            mode=SearchMode.CYPHER,
+            items=["Placeholder"],
+            degraded=True,
+            degraded_kind="capability",
+        ),
+        retry_count=0,
+    )
+    assert decision.action is ControlAction.ESCALATE
+    assert decision.next_route is not None
+    assert decision.next_route.mode is SearchMode.GRAPH_COMPLETION
+    assert decision.reason.startswith("capability_gap_CYPHER:")
+
+
+def test_a_substrate_failure_still_fails_closed() -> None:
+    """The distinction has to cut both ways, or 'escalate on degraded' becomes
+    three more calls against a substrate that is down."""
+    controller = RuntimeController(allow_stub_evidence=False)
+    route = RouteDecision(mode=SearchMode.CHUNKS, rationale="test")
+    decision = controller.decide(
+        QueryRequest(query="q"),
+        route,
+        _packed(items=["Placeholder"], degraded=True, degraded_kind="failure"),
+        retry_count=0,
+    )
+    assert decision.action is ControlAction.FAIL_CLOSED
+    assert decision.stop_reason is StopReason.DEGRADED_RETRIEVAL
+
+
+def test_a_capability_gap_at_the_end_of_the_ladder_fails_closed() -> None:
+    """No next mode means nothing to escalate to, so the fail-closed guarantee
+    still terminates the loop."""
+    controller = RuntimeController(allow_stub_evidence=False)
+    route = RouteDecision(mode=SearchMode.GRAPH_SUMMARY_COMPLETION, rationale="test")
+    decision = controller.decide(
+        QueryRequest(query="q"),
+        route,
+        _packed(
+            mode=SearchMode.GRAPH_SUMMARY_COMPLETION,
+            items=["Placeholder"],
+            degraded=True,
+            degraded_kind="capability",
+        ),
+        retry_count=0,
+    )
+    assert decision.action is ControlAction.FAIL_CLOSED
+
+
+def test_a_capability_gap_never_re_escalates_into_an_attempted_mode() -> None:
+    """Escalating into a mode already tried would loop until MAX_ATTEMPTS."""
+    controller = RuntimeController(allow_stub_evidence=False)
+    route = RouteDecision(mode=SearchMode.CYPHER, rationale="test")
+    decision = controller.decide(
+        QueryRequest(query="q"),
+        route,
+        _packed(mode=SearchMode.CYPHER, items=["P"], degraded=True, degraded_kind="capability"),
+        retry_count=1,
+        attempted_modes=frozenset({SearchMode.GRAPH_COMPLETION}),
+    )
+    assert decision.action is ControlAction.FAIL_CLOSED
 
 
 def test_escalates_to_temporal_when_freshness_contract_unmet() -> None:

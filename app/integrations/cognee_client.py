@@ -5,12 +5,31 @@ import logging
 from typing import Any
 
 from app.core.config import settings
-from app.domain.models import RetrievalEvidence, RetrievalResult, SearchMode
+from app.domain.models import DegradedKind, RetrievalEvidence, RetrievalResult, SearchMode
 from app.integrations.cognee_mapping import to_cognee_search_type
 from app.integrations.cognee_results import evidence_from_search_results
 from app.integrations.cognee_setup import get_cognee_status
 
 logger = logging.getLogger(__name__)
+
+
+# Exceptions that mean "this mode cannot serve this query on this backend",
+# as opposed to "the substrate is having a bad time". Retrying the same mode
+# will always reproduce them, so the controller escalates instead of failing
+# closed. Measured 2026-08-17:
+#   SearchTypeNotSupported — the engine declares the mode unsupported
+#     (postgres and turso both set supports_cypher_queries = False).
+#   CypherSearchError      — the mode ran but could not execute this query
+#     (Roubaix sends natural language to CYPHER, which wants Cypher syntax).
+# Kept as an explicit allow-list, not a catch-all: broadening this to "any
+# retrieval error escalates" would turn a real outage into three more calls
+# against a substrate that is down.
+CAPABILITY_GAP_ERRORS = frozenset({"SearchTypeNotSupported", "CypherSearchError"})
+
+
+def classify_degradation(exc: BaseException) -> DegradedKind:
+    """Return the ``degraded_kind`` for a failed retrieval."""
+    return "capability" if type(exc).__name__ in CAPABILITY_GAP_ERRORS else "failure"
 
 
 async def embed_triplets(dataset: str) -> dict[str, Any]:
@@ -135,6 +154,7 @@ class CogneeClient:
                     reason=(
                         f"{'remote' if remote else 'live'}_search_failed: {type(exc).__name__}"
                     ),
+                    kind=classify_degradation(exc),
                 )
         return self._placeholder_search(
             query, mode, dataset, node_sets, reason="cognee_not_configured"
@@ -313,6 +333,7 @@ class CogneeClient:
         node_sets: list[str] | None,
         *,
         reason: str = "cognee_not_configured",
+        kind: DegradedKind | None = None,
     ) -> RetrievalResult:
         """Deterministic stub evidence for CI and unconfigured environments.
 
@@ -345,4 +366,5 @@ class CogneeClient:
             retrieval_stats={"dataset": dataset, "stub": True, "reason": reason},
             degraded=True,
             degraded_reason=reason,
+            degraded_kind=kind,
         )

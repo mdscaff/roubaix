@@ -135,6 +135,7 @@ class EvidencePacker:
             provenance=result.evidence.provenance,
             degraded=result.degraded,
             degraded_reason=result.degraded_reason,
+            degraded_kind=result.degraded_kind,
             token_estimate=tokens,
             dropped_duplicates=duplicates,
             dropped_over_budget=over_budget,

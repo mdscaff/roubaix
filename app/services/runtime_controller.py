@@ -183,10 +183,38 @@ class RuntimeController:
         widened: bool = False,
         elapsed_ms: int = 0,
     ) -> ControlDecision:
-        # 1. Degraded evidence is fabricated evidence. Escalating cannot fix a
-        #    substrate that is down, and answering from it is worse than not
-        #    answering, so this fails closed immediately.
+        # 1. Degraded evidence is fabricated evidence, and is never answered
+        #    from. What differs is whether there is anything worth trying next.
+        #
+        #    A *failure* (substrate down, timeout, provider error) fails closed
+        #    immediately: escalating spends another retrieval on the same
+        #    broken thing.
+        #
+        #    A *capability gap* is not a failure — it is the backend stating it
+        #    will never serve this mode. Retrying it is guaranteed to reproduce
+        #    it, and the escalation ladder exists for exactly this. Measured
+        #    2026-08-17: on the turso-backed embedded profile, 3 of 4
+        #    CYPHER-routed held-out queries failed closed with retry_count=0 and
+        #    an empty escalation chain, because a permanent mode gap was being
+        #    read as a dead substrate.
+        #
+        #    The invariant is untouched either way: the degraded evidence is
+        #    discarded, never packed into an answer. Only recovery changes. If
+        #    the ladder is exhausted there is no next mode, so that falls back
+        #    to failing closed too.
         if packed.degraded and not self._allow_stub:
+            next_mode = ESCALATION_LADDER.get(route.mode)
+            if (
+                packed.degraded_kind == "capability"
+                and next_mode is not None
+                and next_mode not in attempted_modes
+            ):
+                return self._escalate_to(
+                    next_mode,
+                    route=route,
+                    reason=f"capability_gap_{route.mode.value}:{packed.degraded_reason}",
+                    signals=["degraded.capability"],
+                )
             return ControlDecision(
                 action=ControlAction.FAIL_CLOSED,
                 reason=f"degraded_retrieval:{packed.degraded_reason or 'unknown'}",

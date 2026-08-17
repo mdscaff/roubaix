@@ -2,6 +2,40 @@
 
 All notable changes to Roubaix are documented here.
 
+## [0.12.0] — 2026-08-17
+
+Acts on the cognee storage audit. A capability gap was being read as a dead
+substrate, which turned an unsupported retrieval mode into a guaranteed
+non-answer.
+
+### Fixed
+
+- **The controller now separates a capability gap from an outage.** Degraded
+  retrieval carries a `degraded_kind`: `capability` means this backend can
+  never serve this mode, so the escalation ladder is the designed recovery;
+  `failure` means the substrate is down, where escalating just spends another
+  retrieval on the same problem and still fails closed. Measured before: on
+  the turso embedded profile, **3 of 4 CYPHER-routed held-out queries failed
+  closed with `retry_count=0` and an empty escalation chain**. After: **4 of 4
+  answer**, escalating in 1–2 retries. The safety invariant is untouched —
+  degraded evidence is still never synthesized or cached; only recovery
+  changed. An exhausted ladder, or a next mode already attempted, still fails
+  closed.
+- Classification is an explicit allow-list (`SearchTypeNotSupported`,
+  `CypherSearchError`), not a catch-all, so a real outage cannot quietly
+  become three more calls against a dead substrate.
+
+### Changed
+
+- **`SMOKE_MODES` now covers CYPHER and NATURAL_LANGUAGE.** Their absence is
+  why a permanently dead CYPHER passed a green standup. The report separates
+  `unsupported_modes` from `broken_modes`, and `quality_meaningful` keys off
+  the latter — a backend that never had Cypher should not be reported as
+  having broken retrieval. Unsupported modes are printed on the success path
+  too, since printing them only on failure is how the gap hid.
+- README states plainly that the embedded dev profile (turso) has no Cypher,
+  so dev and production differ in which retrieval modes exist.
+
 ## [0.11.0] — 2026-08-17
 
 Points Roubaix at a Cognee *service* instead of only an in-process SDK, and

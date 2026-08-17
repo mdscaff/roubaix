@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -63,6 +63,12 @@ class RetrievalEvidence(BaseModel):
     provenance: list[dict[str, Any]] = Field(default_factory=list)
 
 
+# What kind of degradation happened. "capability" is permanent for this
+# mode/backend pair and escalating past it is the designed recovery;
+# "failure" is a substrate problem that another mode would hit too.
+DegradedKind = Literal["capability", "failure"]
+
+
 class RetrievalResult(BaseModel):
     mode: SearchMode
     evidence: RetrievalEvidence
@@ -74,6 +80,15 @@ class RetrievalResult(BaseModel):
         "evidence must never be synthesized into a confident answer or cached.",
     )
     degraded_reason: str | None = None
+    degraded_kind: DegradedKind | None = Field(
+        default=None,
+        description="Why the degradation happened, which decides what the "
+        "controller does about it. 'capability': this backend can never serve "
+        "this mode, so escalating to another mode is the fix. 'failure': the "
+        "substrate is down or the call errored, where escalating just spends "
+        "another retrieval on the same problem. Either way the evidence itself "
+        "stays untrusted — this changes recovery, never what may be synthesized.",
+    )
 
 
 class PackedEvidence(BaseModel):
@@ -84,6 +99,7 @@ class PackedEvidence(BaseModel):
     provenance: list[dict[str, Any]] = Field(default_factory=list)
     degraded: bool = False
     degraded_reason: str | None = None
+    degraded_kind: DegradedKind | None = None
     token_estimate: int = 0
     dropped_duplicates: int = 0
     dropped_over_budget: int = 0
