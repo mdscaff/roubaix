@@ -13,6 +13,35 @@ from app.integrations.cognee_setup import get_cognee_status
 logger = logging.getLogger(__name__)
 
 
+async def embed_triplets(dataset: str) -> dict[str, Any]:
+    """Embed *dataset*'s triples so TRIPLET_COMPLETION can retrieve them.
+
+    ``cognify`` does not do this: measured on cognee 1.4.2, the triplet_text
+    collection stays empty and TRIPLET_COMPLETION raises ``NoDataError`` until
+    this memify pipeline runs. Every ingestion path needs it, so it lives here
+    rather than in one script — a corpus ingested without it has a retrieval
+    mode that is permanently dead, and nothing else reports that.
+
+    Never raises: a failure costs one retrieval mode, not the ingestion.
+    """
+    try:
+        from cognee.memify_pipelines.create_triplet_embeddings import (  # type: ignore[import-not-found]
+            create_triplet_embeddings,
+        )
+        from cognee.modules.users.methods import (  # type: ignore[import-not-found]
+            get_default_user,
+        )
+
+        await create_triplet_embeddings(user=await get_default_user(), dataset=dataset)
+        return {"ok": True}
+    except Exception as exc:  # noqa: BLE001 - one mode degrades; ingestion stands
+        logger.warning(
+            "triplet_embeddings_failed",
+            extra={"dataset": dataset, "error": str(exc), "error_type": type(exc).__name__},
+        )
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
 class CogneeClient:
     """Thin wrapper around Cognee SDK search and ingest.
 
@@ -157,6 +186,7 @@ class CogneeClient:
             "dataset": dataset,
             "node_sets": node_sets or [],
             "live": True,
+            "triplet_embeddings": await embed_triplets(dataset),
         }
 
     @staticmethod

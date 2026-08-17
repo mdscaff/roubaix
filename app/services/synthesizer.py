@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -53,13 +54,19 @@ class AnswerSynthesizer:
         endpoint: str | None = None,
         timeout_s: float | None = None,
     ) -> None:
-        self.api_key = api_key or resolve_llm_api_key()
+        # `None` means "not specified, go find one"; `""` means "explicitly no
+        # key". Collapsing them with `or` made an empty string fall through to
+        # settings, which reads .env — so a caller asking for no key got
+        # whatever the developer's .env held, and the two tests asserting
+        # no-key behaviour passed only on machines without one.
+        self.api_key = resolve_llm_api_key() if api_key is None else api_key
         self.model = model or settings.default_model
         self.endpoint = (
             endpoint or settings.default_llm_endpoint or "https://openrouter.ai/api/v1"
         ).rstrip("/")
         self.timeout_s = timeout_s if timeout_s is not None else settings.synthesis_timeout_s
         self._http: httpx.AsyncClient | None = None
+        self._http_loop: asyncio.AbstractEventLoop | None = None
 
     async def synthesize(
         self,
@@ -138,13 +145,20 @@ class AnswerSynthesizer:
         )
 
     async def _client(self) -> httpx.AsyncClient:
-        """Lazily create a pooled client.
+        """Lazily create a pooled client, bound to the running event loop.
 
         A fresh AsyncClient per request means a full TLS handshake per
-        synthesis, which is pure added latency on the hot path.
+        synthesis, which is pure added latency on the hot path. But a pooled
+        client holds connections owned by the loop that created it, so reusing
+        one across loops raises from deep inside httpx. A long-lived server has
+        one loop and never notices; anything that runs the app on a series of
+        loops does. Re-pool per loop: still one handshake per loop, not per
+        request.
         """
-        if self._http is None or self._http.is_closed:
+        loop = asyncio.get_running_loop()
+        if self._http is None or self._http.is_closed or self._http_loop is not loop:
             self._http = httpx.AsyncClient(timeout=self.timeout_s)
+            self._http_loop = loop
         return self._http
 
     async def aclose(self) -> None:

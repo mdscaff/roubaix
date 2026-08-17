@@ -50,6 +50,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from app.core.config import settings
+from app.integrations.cognee_setup import (
+    resolve_embedding_api_key,
+    resolve_llm_api_key,
+)
+
 SMOKE_MODES = ("CHUNKS", "TRIPLET_COMPLETION", "GRAPH_COMPLETION")
 CORPUS = REPO_ROOT / "evals" / "corpus" / "roubaix_basics.md"
 REPORT_DIR = REPO_ROOT / "evals" / "live"
@@ -100,9 +106,12 @@ def preflight(allow_mock_embeddings: bool) -> list[dict]:
         )
     )
 
-    llm_key = (
-        os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY")
-    )
+    # Through the same resolvers the runtime uses, NOT raw os.getenv: keys set
+    # in a gitignored .env (which is what this script's own fix text tells you
+    # to do, and what the README documents) are read by pydantic settings and
+    # never appear in the process environment. Checking os.getenv reported "no
+    # LLM key in env" to correctly-configured setups and refused to start.
+    llm_key = os.getenv("LLM_API_KEY") or resolve_llm_api_key()
     checks.append(
         _check(
             "llm_key",
@@ -121,7 +130,9 @@ def preflight(allow_mock_embeddings: bool) -> list[dict]:
     # reachable, and in sandboxed environments the egress allowlist — not the
     # key — is usually the binding constraint.
     endpoint = (
-        "https://openrouter.ai" if os.getenv("OPENROUTER_API_KEY") else "https://api.openai.com"
+        "https://openrouter.ai"
+        if (os.getenv("OPENROUTER_API_KEY") or settings.openrouter_api_key)
+        else "https://api.openai.com"
     )
     llm_reachable = _reachable(endpoint)
     checks.append(
@@ -163,10 +174,21 @@ def preflight(allow_mock_embeddings: bool) -> list[dict]:
             )
         )
 
-    have_embed_key = bool(os.getenv("OPENAI_API_KEY") or os.getenv("EMBEDDING_API_KEY"))
+    # OpenRouter counts: it serves /v1/embeddings (verified 2026-08-17 with
+    # real vectors), and cognee_setup points EMBEDDING_ENDPOINT at it when no
+    # OpenAI key exists. Omitting it here reported "no embedding provider" to
+    # environments that had a working one, whose documented fix — mock
+    # vectors — would have thrown away real ranking for no reason.
+    have_embed_key = bool(resolve_embedding_api_key())
     mock_on = os.getenv("MOCK_EMBEDDING", "").lower() in ("true", "1", "yes")
     if have_embed_key:
-        checks.append(_check("embeddings", True, "real embedding provider configured"))
+        explicit = (
+            os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY") or settings.openai_api_key
+        )
+        provider = "openai" if explicit else "openrouter"
+        checks.append(
+            _check("embeddings", True, f"real embedding provider configured ({provider})")
+        )
     elif allow_mock_embeddings or mock_on:
         checks.append(
             _check(
@@ -220,7 +242,7 @@ def apply_embedded_profile(work_dir: Path, allow_mock_embeddings: bool) -> dict[
         "DATA_ROOT_DIRECTORY": str(work_dir / "data"),
         "SYSTEM_ROOT_DIRECTORY": str(work_dir / "system"),
     }
-    if allow_mock_embeddings and not os.getenv("OPENAI_API_KEY"):
+    if allow_mock_embeddings and not resolve_embedding_api_key():
         applied["MOCK_EMBEDDING"] = "true"
     for key, value in applied.items():
         os.environ.setdefault(key, value)
@@ -246,18 +268,12 @@ async def seed_and_smoke(dataset: str, mock_embeddings: bool) -> dict:
     await cognee.cognify(datasets=[dataset])
     report["seed"] = {"corpus": str(CORPUS), "bytes": len(content)}
 
-    # cognify alone does NOT populate the triplet_text collection: measured on
-    # cognee 1.4.2, TRIPLET_COMPLETION returns NoDataError until the memify
-    # pipeline embeds the triples. Without this the mode is permanently
-    # degraded and `all_modes_live` can never be true.
-    from cognee.memify_pipelines.create_triplet_embeddings import create_triplet_embeddings
-    from cognee.modules.users.methods import get_default_user
+    # cognify alone does NOT populate the triplet_text collection, so
+    # TRIPLET_COMPLETION stays dead without this. Shared with every other
+    # ingestion path — see cognee_client.embed_triplets.
+    from app.integrations.cognee_client import embed_triplets
 
-    try:
-        await create_triplet_embeddings(user=await get_default_user(), dataset=dataset)
-        report["triplet_embeddings"] = {"ok": True}
-    except Exception as exc:  # noqa: BLE001 - name the boundary, keep the smoke results
-        report["triplet_embeddings"] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    report["triplet_embeddings"] = await embed_triplets(dataset)
 
     for mode_name in SMOKE_MODES:
         mode = SearchMode(mode_name)

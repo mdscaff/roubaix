@@ -16,6 +16,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1"
+
 _COGNEE_STATUS: dict[str, Any] = {"configured": False}
 
 
@@ -58,7 +60,7 @@ def build_cognee_env_overrides() -> dict[str, str]:
     if (os.getenv("OPENROUTER_API_KEY") or settings.openrouter_api_key) and not os.getenv(
         "LLM_ENDPOINT"
     ):
-        endpoint = settings.default_llm_endpoint or "https://openrouter.ai/api/v1"
+        endpoint = settings.default_llm_endpoint or OPENROUTER_ENDPOINT
         overrides["LLM_ENDPOINT"] = endpoint
 
     if not os.getenv("LLM_MODEL"):
@@ -71,6 +73,20 @@ def build_cognee_env_overrides() -> dict[str, str]:
     embedding_api_key = resolve_embedding_api_key()
     if embedding_api_key and not os.getenv("EMBEDDING_API_KEY"):
         overrides["EMBEDDING_API_KEY"] = embedding_api_key
+
+    # The embedding endpoint has to follow the embedding *key*. Bridging
+    # LLM_ENDPOINT but not this one sent an OpenRouter key to api.openai.com on
+    # any OpenRouter-only setup, so embeddings 401'd while chat worked — the
+    # confusing half-failure, since cognify's first visible error is unrelated.
+    # Only when no OpenAI key exists: with one present the key resolver prefers
+    # it, and OpenAI's own endpoint is the right target. Verified 2026-08-17
+    # that OpenRouter serves /v1/embeddings with real vectors.
+    if (
+        not os.getenv("EMBEDDING_ENDPOINT")
+        and not (os.getenv("OPENAI_API_KEY") or settings.openai_api_key)
+        and (os.getenv("OPENROUTER_API_KEY") or settings.openrouter_api_key)
+    ):
+        overrides["EMBEDDING_ENDPOINT"] = settings.default_llm_endpoint or OPENROUTER_ENDPOINT
 
     if not os.getenv("EMBEDDING_MODEL"):
         embedding_model = os.getenv("DEFAULT_EMBEDDING_MODEL") or settings.default_embedding_model
