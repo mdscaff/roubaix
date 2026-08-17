@@ -387,13 +387,27 @@ reports *which* constraint binds.
        await cognee.serve()                                   # cloud, Auth0 device flow
 
    One API covers both a self-hosted Cognee container and a hosted tenant, and
-   in either case that service — not this repository — owns storage. What is
-   still true is the second half: **`CogneeClient` implements none of this.**
-   It drives the embedded in-process SDK, so pointing Roubaix at a Cognee
-   service is a real task (a remote mode on `CogneeClient`), not a config
-   change. Note the env var names differ from this repo's settings: cognee
-   reads `COGNEE_SERVICE_URL`, while `app/core/config.py` declares
-   `COGNEE_BASE_URL`.
+   in either case that service — not this repository — owns storage.
+
+   **Remote mode is now implemented** (`CogneeClient._remote_search` /
+   `_remote_ingest`, selected by `COGNEE_SERVICE_URL`; the older
+   `COGNEE_BASE_URL` still resolves). Verified end to end on 2026-08-17
+   against a real `cognee.api.client` REST server: search returned live
+   evidence and a full orchestrator round trip produced a grounded, cited,
+   non-degraded answer. An unreachable service degrades with
+   `remote_search_failed`, distinct from the embedded path's
+   `live_search_failed`, so the two substrates are told apart in telemetry.
+
+   Two limits, stated rather than discovered later:
+
+   - The remote search endpoint forwards `node_name` but has **no
+     `node_name_filter_operator` parameter**, so the explicit OR that embedded
+     mode sets for multi-NodeSet scope cannot cross the wire. Scope still
+     narrows; "any of these NodeSets" is not guaranteed. Recorded per result
+     as `node_name_filter_operator_sent: false`.
+   - Remote ingest does **not** run `embed_triplets` — memify belongs to the
+     instance owning the store. Whether TRIPLET_COMPLETION works remotely is
+     that service's responsibility.
 
 An API key is a secret: it belongs in the gitignored `.env` or the
 environment's secret store, never in a committed file or a chat transcript if

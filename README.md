@@ -89,7 +89,7 @@ Query → Normalize → Cache check → Route → Retrieve → Pack evidence
 | NodeSet derivation precision gate (Phase C1 acceptance) | **Run: 92% precision** (gate ≥70%), caller-scope invariant holds; gated in CI |
 | Scored router + cost-rank tie-break + negation handling | Working, gated in CI |
 | Content-addressed cache (LRU + TTL) | Working; key covers query, dataset, freshness, scope, model, policy version |
-| Cognee retrieval | Live SDK when configured; flagged-degraded stub otherwise |
+| Cognee retrieval | Embedded SDK, or a remote Cognee service (self-hosted sidecar / Cognee Cloud) via `COGNEE_SERVICE_URL`; flagged-degraded stub otherwise |
 | Evidence packing (dedup, token budget, disclosure) | Working |
 | Runtime controller (widen → escalate → fail closed) | Working |
 | Set-level sufficiency gate (Tier 0 lexical; Tier 1 MiniCheck via `verify` extra) | Working; acceptance gates encoded as losable tests |

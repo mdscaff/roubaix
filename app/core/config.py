@@ -15,9 +15,20 @@ class Settings(BaseSettings):
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
 
-    # Cognee Cloud HTTP API — not used for local SDK + pgGraph
+    # A remote Cognee service: a self-hosted sidecar or a Cognee Cloud tenant.
+    # Set either one and CogneeClient talks to it over HTTP instead of running
+    # the SDK in-process; that service then owns storage, so none of the
+    # GRAPH_DATABASE_* settings below apply. COGNEE_SERVICE_URL is the name
+    # cognee itself reads; COGNEE_BASE_URL is this repo's older alias, kept
+    # working so existing .env files do not break.
     cognee_api_key: str | None = Field(default=None, alias="COGNEE_API_KEY")
+    cognee_service_url: str | None = Field(default=None, alias="COGNEE_SERVICE_URL")
     cognee_base_url: str | None = Field(default=None, alias="COGNEE_BASE_URL")
+
+    @property
+    def cognee_remote_url(self) -> str | None:
+        """The remote Cognee service URL, whichever alias supplied it."""
+        return self.cognee_service_url or self.cognee_base_url
 
     default_model: str = Field(default="openai/gpt-4o-mini", alias="DEFAULT_MODEL")
     default_llm_endpoint: str | None = Field(

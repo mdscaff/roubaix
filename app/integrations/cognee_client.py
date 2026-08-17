@@ -50,8 +50,38 @@ class CogneeClient:
     """
 
     def __init__(self, base_url: str | None = None, api_key: str | None = None) -> None:
-        self.base_url = base_url or settings.cognee_base_url
+        self.base_url = base_url or settings.cognee_remote_url
         self.api_key = api_key or settings.cognee_api_key
+        self._remote_client: Any | None = None
+
+    def _use_remote(self) -> bool:
+        """Remote mode wins over the embedded SDK when a service URL is set.
+
+        Deliberately ordered that way: someone who configured a service URL
+        meant to use that service, and silently running an in-process SDK
+        against a different store instead is the kind of divergence that only
+        shows up as "why is my data missing".
+        """
+        return bool(self.base_url)
+
+    async def _remote(self) -> Any:
+        """Connect (once) to the configured Cognee service.
+
+        ``cognee.serve`` returns a CloudClient speaking the same HTTP API for a
+        self-hosted instance and a Cognee Cloud tenant, so the sidecar and the
+        hosted deployments differ only in URL and key.
+        """
+        if self._remote_client is None:
+            import cognee  # type: ignore[import-not-found]
+
+            self._remote_client = await cognee.serve(url=self.base_url, api_key=self.api_key)
+        return self._remote_client
+
+    async def aclose(self) -> None:
+        """Release the remote session. No-op in embedded mode."""
+        if self._remote_client is not None:
+            await self._remote_client.close()
+            self._remote_client = None
 
     async def search(
         self,
@@ -62,10 +92,12 @@ class CogneeClient:
         evidence_budget: int | None = None,
     ) -> RetrievalResult:
         top_k = evidence_budget or settings.max_evidence_items
-        if self._use_live_search():
+        remote = self._use_remote()
+        if remote or self._use_live_search():
+            search = self._remote_search if remote else self._live_search
             try:
                 return await asyncio.wait_for(
-                    self._live_search(
+                    search(
                         query=query,
                         mode=mode,
                         dataset=dataset,
@@ -100,7 +132,9 @@ class CogneeClient:
                     mode,
                     dataset,
                     node_sets,
-                    reason=f"live_search_failed: {type(exc).__name__}",
+                    reason=(
+                        f"{'remote' if remote else 'live'}_search_failed: {type(exc).__name__}"
+                    ),
                 )
         return self._placeholder_search(
             query, mode, dataset, node_sets, reason="cognee_not_configured"
@@ -109,13 +143,16 @@ class CogneeClient:
     async def ingest(
         self, content: str, dataset: str, node_sets: list[str] | None = None
     ) -> dict[str, Any]:
-        if self._use_live_search():
+        remote = self._use_remote()
+        if remote or self._use_live_search():
             try:
+                if remote:
+                    return await self._remote_ingest(content, dataset, node_sets)
                 return await self._live_ingest(content, dataset, node_sets)
             except Exception as exc:  # noqa: BLE001 - substrate boundary; failure is flagged degraded
                 logger.warning(
                     "cognee_ingest_failed",
-                    extra={"dataset": dataset, "error": str(exc)},
+                    extra={"dataset": dataset, "remote": remote, "error": str(exc)},
                 )
         return {
             "status": "accepted",
@@ -127,6 +164,57 @@ class CogneeClient:
     def _use_live_search(self) -> bool:
         status = get_cognee_status()
         return bool(status.get("configured"))
+
+    async def _remote_search(
+        self,
+        *,
+        query: str,
+        mode: SearchMode,
+        dataset: str,
+        node_sets: list[str] | None,
+        top_k: int,
+    ) -> RetrievalResult:
+        """Search a remote Cognee service. Same contract as ``_live_search``.
+
+        One capability gap, deliberately not hidden: the remote search endpoint
+        forwards ``node_name`` but has no parameter for
+        ``node_name_filter_operator``, so a multi-NodeSet scope falls to the
+        server's default operator instead of the OR this repo sets explicitly
+        in embedded mode. Scope still narrows, but "any of these NodeSets" is
+        not guaranteed, so the stats record what could not be sent rather than
+        implying parity.
+        """
+        client = await self._remote()
+
+        kwargs: dict[str, Any] = {
+            "search_type": to_cognee_search_type(mode),
+            "datasets": [dataset],
+            "top_k": top_k,
+            "only_context": True,
+        }
+        if node_sets:
+            kwargs["node_name"] = node_sets
+
+        raw_results = await client.search(query, **kwargs)
+        evidence = evidence_from_search_results(
+            mode,
+            raw_results,
+            dataset=dataset,
+            node_sets=node_sets,
+        )
+        return RetrievalResult(
+            mode=mode,
+            evidence=evidence,
+            retrieval_stats={
+                "dataset": dataset,
+                "top_k": top_k,
+                "node_sets": node_sets or [],
+                "live": True,
+                "remote": True,
+                "service_url": self.base_url,
+                "node_name_filter_operator_sent": False,
+            },
+        )
 
     async def _live_search(
         self,
@@ -170,6 +258,34 @@ class CogneeClient:
                 "live": True,
             },
         )
+
+    async def _remote_ingest(
+        self, content: str, dataset: str, node_sets: list[str] | None
+    ) -> dict[str, Any]:
+        """Ingest into a remote Cognee service.
+
+        No ``embed_triplets`` call here, and that is not an omission: the
+        memify pipeline runs *inside* the instance that owns the store, so
+        invoking the local one would build triplet embeddings in an unrelated
+        in-process database. Whether TRIPLET_COMPLETION works against a remote
+        service is therefore that service's responsibility — flagged in the
+        result so a dead retrieval mode is traceable to the right side.
+        """
+        client = await self._remote()
+
+        add_kwargs: dict[str, Any] = {"dataset_name": dataset}
+        if node_sets:
+            add_kwargs["node_set"] = node_sets
+        await client.add(content, **add_kwargs)
+        await client.cognify(datasets=[dataset])
+        return {
+            "status": "accepted",
+            "dataset": dataset,
+            "node_sets": node_sets or [],
+            "live": True,
+            "remote": True,
+            "triplet_embeddings": "owned_by_remote_service",
+        }
 
     async def _live_ingest(
         self, content: str, dataset: str, node_sets: list[str] | None
